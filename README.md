@@ -3,11 +3,57 @@
 [![CI](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml/badge.svg)](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-English | [简体中文](README.zh-CN.md)
+English | [简体中文](README.zh-CN.md) · [v0.2.0 release](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.2.0) · [GitHub Action setup](#use-the-github-action)
 
-**Evidence-backed PR review against GitHub issue acceptance criteria — pairing a portable Agent Skill with a zero-dependency Python CLI for context packing, diff line annotation, and deterministic citation verification.**
+BriefCheck reviews pull requests against GitHub issue acceptance criteria. The **Agent Skill** drafts review tables, the **zero-dependency Python CLI** verifies diff citations deterministically, and the **GitHub Action** generates, verifies, and posts the review on the PR.
 
-Most AI code-review tools focus on generic style nits. Maintainers usually need something more concrete: *does this pull request actually satisfy every acceptance requirement in the linked issue, where is the exact code or test proof, and did the reviewer hallucinate any line numbers?*
+## Catch bad citations before posting
+
+This review cites `auth.py:3` as a new line even though the diff deleted it. It also cites `auth.py:99`, which is outside the visible diff. `briefcheck verify` reports both errors.
+
+```text
+BriefCheck Verify: FAIL
+…
+Errors (2):
+  - [deleted_line_cited_as_new] (row 1, line 3, auth.py:3) Line(s) 3 of `auth.py` were deleted and exist only on the base (old) side; label the citation as `base` or cite visible new-side lines.
+  - [line_out_of_hunk] (row 1, line 3, auth.py:99) Line(s) 99 of `auth.py` are not visible in diff hunks on the new side (visible new lines: 1–2).
+```
+
+Mark `auth.py:3` as `(base)` and change `auth.py:99` to `auth.py:2`. The same command returns `BriefCheck Verify: PASS`, and the review still records the requirement as `Contradicted`.
+
+<details>
+<summary>Run this example locally</summary>
+
+After [installing BriefCheck](#install), save these two files.
+
+`change.diff`
+
+```diff
+diff --git a/auth.py b/auth.py
+--- a/auth.py
++++ b/auth.py
+@@ -1,4 +1,2 @@
+ def guard(user):
+-    if not user.is_admin:
+-        raise PermissionError()
+     return True
+```
+
+`review.md`
+
+```markdown
+| Acceptance requirement | Judgment | Evidence | Follow-up |
+| --- | --- | --- | --- |
+| Reject non-admins | Contradicted | `auth.py:3` is the removed error and `auth.py:99` returns True. | Restore the guard. |
+```
+
+Run the verifier on both files.
+
+```sh
+briefcheck verify --report review.md --diff change.diff
+```
+
+</details>
 
 ## What BriefCheck includes
 
@@ -136,7 +182,7 @@ You can also pass `--pr owner/repo#123` or the same local Git range options as `
 
 ## Use the GitHub Action
 
-Add the following workflow at `.github/workflows/briefcheck.yml`. Configure the `OPENAI_API_KEY` repository secret and the `BRIEFCHECK_MODEL` variable. Use the tagged Action after v0.2.0 is published, or pin to a trusted commit containing `action.yml` while testing.
+Add the following workflow at `.github/workflows/briefcheck.yml`. Configure the `OPENAI_API_KEY` repository secret and the `BRIEFCHECK_MODEL` variable. This workflow uses the [v0.2.0 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.2.0/action.yml).
 
 ~~~yaml
 name: BriefCheck review

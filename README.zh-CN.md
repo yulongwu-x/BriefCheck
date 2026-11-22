@@ -3,9 +3,57 @@
 [![CI](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml/badge.svg)](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-[English](README.md) | 简体中文
+[English](README.md) | 简体中文 · [v0.2.0 发布](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.2.0) · [配置 GitHub Action](#使用-github-action)
 
-**基于证据的 PR 验收审查工具**：将可移植的 **Agent Skill** 与零依赖的 **Python CLI** 结合起来，用来逐条核对 GitHub Issue 的验收要求和 PR 改动，并对审查结果中的文件行号、表格格式与测试日志提交号做确定性校验。
+BriefCheck 逐条核对 GitHub Issue 的验收要求与 PR 改动。**Agent Skill** 生成审查表，**零依赖 Python CLI** 按 diff 确定性校验引用行号，**GitHub Action** 自动生成、校验审查表并发布到 PR。
+
+## 发布前抓出错误行号
+
+这份审查把已删除的 `auth.py:3` 当成新侧行号，还引用了超出 diff 可见范围的 `auth.py:99`。`briefcheck verify` 会分别报错。
+
+```text
+BriefCheck Verify: FAIL
+…
+Errors (2):
+  - [deleted_line_cited_as_new] (row 1, line 3, auth.py:3) Line(s) 3 of `auth.py` were deleted and exist only on the base (old) side; label the citation as `base` or cite visible new-side lines.
+  - [line_out_of_hunk] (row 1, line 3, auth.py:99) Line(s) 99 of `auth.py` are not visible in diff hunks on the new side (visible new lines: 1–2).
+```
+
+把 `auth.py:3` 标为 `(base)`，再把 `auth.py:99` 改成 `auth.py:2`。用同一条命令重跑会得到 `BriefCheck Verify: PASS`，验收判断仍为「明确不符」。
+
+<details>
+<summary>在本地复现</summary>
+
+[安装 BriefCheck](#安装)后，保存下面两个文件。
+
+`change.diff`
+
+```diff
+diff --git a/auth.py b/auth.py
+--- a/auth.py
++++ b/auth.py
+@@ -1,4 +1,2 @@
+ def guard(user):
+-    if not user.is_admin:
+-        raise PermissionError()
+     return True
+```
+
+`review.md`
+
+```markdown
+| Acceptance requirement | Judgment | Evidence | Follow-up |
+| --- | --- | --- | --- |
+| Reject non-admins | Contradicted | `auth.py:3` is the removed error and `auth.py:99` returns True. | Restore the guard. |
+```
+
+用这两个文件运行校验。
+
+```sh
+briefcheck verify --report review.md --diff change.diff
+```
+
+</details>
 
 ## 包含内容
 
@@ -120,7 +168,7 @@ briefcheck run \
 
 ## 使用 GitHub Action
 
-将下面的工作流保存到 `.github/workflows/briefcheck.yml`。在仓库中配置 `OPENAI_API_KEY` Secret 和 `BRIEFCHECK_MODEL` 变量。v0.2.0 标签发布后使用示例中的引用，开发测试时可改为包含 `action.yml` 的可信提交号。
+将下面的工作流保存到 `.github/workflows/briefcheck.yml`。在仓库中配置 `OPENAI_API_KEY` Secret 和 `BRIEFCHECK_MODEL` 变量。下面的工作流使用 [v0.2.0 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.2.0/action.yml)。
 
 ~~~yaml
 name: BriefCheck review

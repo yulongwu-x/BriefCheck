@@ -1,0 +1,10 @@
+Revision: 1111111222222233333333444444445555555566
+Command: python -m unittest discover -s tests -v
+Exit code: 0
+
+test_retries_503_and_skips_400 (test_http.RetryPolicyTests.test_retries_503_and_skips_400) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.004s
+
+OK

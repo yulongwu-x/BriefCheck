@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "briefcheck"
+version = "0.1.0"
+description = "Requirement-by-requirement PR verification against GitHub issue acceptance criteria, with deterministic diff citation checking and an Agent Skill."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [
+  { name = "BriefCheck contributors" },
+]
+keywords = [
+  "code-review",
+  "pull-request",
+  "github",
+  "diff",
+  "codex",
+  "agent-skill",
+  "verification",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Software Development :: Version Control :: Git",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/yulongwu-x/BriefCheck"
+Repository = "https://github.com/yulongwu-x/BriefCheck"
+Issues = "https://github.com/yulongwu-x/BriefCheck/issues"
+
+[project.scripts]
+briefcheck = "briefcheck.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

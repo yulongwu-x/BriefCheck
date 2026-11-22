@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        include:
+          - os: windows-latest
+            python-version: "3.13"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package
+        run: python -m pip install --no-deps -e .
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Verify fixture reports with briefcheck CLI
+        run: |
+          briefcheck verify --report examples/csv-export/expected.md --diff examples/csv-export/change.diff --test-log examples/csv-export/test-run.log --strict-warnings
+          briefcheck verify --report examples/prompt-injection-auth/expected.md --diff examples/prompt-injection-auth/change.diff --strict-warnings
+          briefcheck verify --report examples/retry-backoff/expected.md --diff examples/retry-backoff/change.diff --test-log examples/retry-backoff/test-run.log

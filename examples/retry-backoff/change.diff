@@ -1,0 +1,55 @@
+From b2c3d4e5f6a708192a3b4c5d6e7f8091a2b3c4d5 Mon Sep 17 00:00:00 2001
+From: BriefCheck Fixtures <fixtures@briefcheck.invalid>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Add retry with exponential backoff for 503 responses
+
+
+diff --git a/client/http.py b/client/http.py
+index 2233445..6677889 100644
+--- a/client/http.py
++++ b/client/http.py
+@@ -4,3 +4,6 @@ import time
+ DEFAULT_TIMEOUT = 10.0
++RETRYABLE_STATUSES = {503}
++MAX_RETRIES = 3
++BASE_DELAY = 0.5
+ 
+ def build_headers(token: str) -> dict[str, str]:
+@@ -40,5 +43,11 @@ def fetch_with_retry(request_fn, sleep_fn=time.sleep):
+     """Execute request_fn and retry transient failures."""
+-    return request_fn()
++    response = request_fn()
++    for attempt in range(MAX_RETRIES - 1):
++        if response.status_code not in RETRYABLE_STATUSES:
++            return response
++        sleep_fn(BASE_DELAY * (2 ** attempt))
++        response = request_fn()
++    return response
+ 
+ def close_session(session):
+     session.close()
+diff --git a/tests/test_http.py b/tests/test_http.py
+new file mode 100644
+index 0000000..99aabb0
+--- /dev/null
++++ b/tests/test_http.py
+@@ -0,0 +1,19 @@
++from unittest import TestCase
++
++from client.http import fetch_with_retry
++
++
++class RetryPolicyTests(TestCase):
++    def test_retries_503_and_skips_400(self):
++        class Resp:
++            def __init__(self, code: int):
++                self.status_code = code
++
++        calls = []
++        resp_400 = fetch_with_retry(lambda: calls.append(400) or Resp(400), sleep_fn=lambda _: None)
++        self.assertEqual(resp_400.status_code, 400)
++        self.assertEqual(len(calls), 1)
++
++        delays = []
++        fetch_with_retry(lambda: Resp(503), sleep_fn=delays.append)
++        self.assertEqual(delays, [0.5, 1.0])

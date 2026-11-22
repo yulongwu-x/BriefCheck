@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "briefcheck"
-version = "0.3.1"
+version = "0.4.0"
 description = "Requirement-by-requirement PR verification against GitHub issue acceptance criteria, with deterministic diff citation checking and an Agent Skill."
 readme = "README.md"
 license = { file = "LICENSE" }

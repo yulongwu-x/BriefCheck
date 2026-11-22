@@ -2,6 +2,12 @@
 
 All notable changes to BriefCheck will be documented in this file.
 
+## [0.4.0] - 2026-11-22
+
+### Added
+- `briefcheck check` (`verify_citations`): verify all `path:line` and `(base)` diff citations inside **any** free-form Markdown PR review (stdin by default) from Claude Code, Codex, Cursor, Copilot, or custom review scripts.
+- Support for `--diff`, `--git-base`, `--staged` (`git diff --cached`), and `--pr owner/repo#123` diff sources in `briefcheck check`, plus `--require-citations` and `--format json`.
+
 ## [0.3.1] - 2026-11-22
 
 ### Added

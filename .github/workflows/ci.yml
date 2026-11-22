@@ -39,3 +39,4 @@ jobs:
           briefcheck verify --report examples/csv-export/expected.md --diff examples/csv-export/change.diff --test-log examples/csv-export/test-run.log --strict-warnings
           briefcheck verify --report examples/prompt-injection-auth/expected.md --diff examples/prompt-injection-auth/change.diff --strict-warnings
           briefcheck verify --report examples/retry-backoff/expected.md --diff examples/retry-backoff/change.diff --test-log examples/retry-backoff/test-run.log
+          briefcheck check --input examples/prompt-injection-auth/expected.md --diff examples/prompt-injection-auth/change.diff --require-citations --strict-warnings

@@ -7,10 +7,13 @@ import re
 from typing import Any, Literal
 
 from .diff import ParsedDiff, format_line_ranges, parse_unified_diff
-from .report import ParsedReport, parse_report
+from .report import Citation, ParsedReport, extract_citations, parse_report
 
 Severity = Literal["error", "warning"]
 FailGate = Literal["none", "contradicted", "insufficient", "unresolved"]
+VerifyMode = Literal["report", "citations"]
+
+_FENCE_RE = re.compile(r"^(`{3,}|~{3,})")
 
 _LOG_REVISION_RE = re.compile(
     r"(?:revision(?:\s*\([^)]*\))?|commit(?:\s+sha)?|head(?:\s+is\s+now\s+at)?|sha)\s*[:=]?\s*([0-9a-f]{7,40})\b",
@@ -83,6 +86,7 @@ class VerificationResult:
     diff_revision: str | None = None
     test_log_revision: str | None = None
     test_log_revision_matched: bool | None = None
+    mode: VerifyMode = "report"
 
     def is_valid(self, strict_warnings: bool = False) -> bool:
         """Return True if verification passed without blocking findings."""
@@ -108,31 +112,38 @@ class VerificationResult:
         return False
 
     def to_dict(self, strict_warnings: bool = False) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
+            "mode": self.mode,
             "valid": self.is_valid(strict_warnings=strict_warnings),
-            "row_count": self.row_count,
             "citation_count": self.citation_count,
-            "judgments": dict(self.judgment_counts),
             "diff_revision": self.diff_revision,
             "test_log_revision": self.test_log_revision,
             "test_log_revision_matched": self.test_log_revision_matched,
             "errors": [f.to_dict() for f in self.errors],
             "warnings": [f.to_dict() for f in self.warnings],
         }
+        if self.mode == "report":
+            payload["row_count"] = self.row_count
+            payload["judgments"] = dict(self.judgment_counts)
+        return payload
 
     def format_text(self, strict_warnings: bool = False) -> str:
         status = "PASS" if self.is_valid(strict_warnings=strict_warnings) else "FAIL"
-        lines = [
-            f"BriefCheck Verify: {status}",
-            (
+        header = (
+            f"BriefCheck Verify: {status}"
+            if self.mode == "report"
+            else f"BriefCheck Check: {status}"
+        )
+        lines = [header]
+        if self.mode == "report":
+            lines.append(
                 f"Rows: {self.row_count} "
                 f"(supported={self.judgment_counts['supported']}, "
                 f"contradicted={self.judgment_counts['contradicted']}, "
                 f"insufficient={self.judgment_counts['insufficient_evidence']}, "
                 f"invalid={self.judgment_counts['invalid']})"
-            ),
-            f"Citations checked: {self.citation_count}",
-        ]
+            )
+        lines.append(f"Citations checked: {self.citation_count}")
         if self.diff_revision or self.test_log_revision:
             rev_bits: list[str] = []
             if self.diff_revision:
@@ -171,6 +182,236 @@ def _format_finding_loc(finding: Finding) -> str:
     if finding.citation:
         parts.append(finding.citation)
     return f" ({', '.join(parts)})" if parts else ""
+
+
+def _verify_citation(
+    citation: Citation,
+    parsed_diff: ParsedDiff,
+    available_files: list[str],
+    result: VerificationResult,
+    *,
+    row: int | None,
+    line: int | None,
+    allow_external_files: bool,
+) -> None:
+    result.citation_count += 1
+    if citation.start <= 0 or citation.end < citation.start:
+        result.errors.append(
+            Finding(
+                severity="error",
+                code="invalid_line_range",
+                message=(
+                    f"Invalid line range {citation.start}\u2013{citation.end} "
+                    "(lines must be positive and end >= start)."
+                ),
+                row=row,
+                line=line,
+                citation=citation.label(),
+            )
+        )
+        return
+
+    fdiff = parsed_diff.find_file(citation.path)
+    if fdiff is None:
+        severity: Severity = "warning" if allow_external_files else "error"
+        files_hint = ", ".join(available_files[:6]) if available_files else "none"
+        finding = Finding(
+            severity=severity,
+            code="external_file_citation" if allow_external_files else "unknown_file",
+            message=(
+                f"File `{citation.path}` is not present in the diff "
+                f"(diff files: {files_hint})."
+            ),
+            row=row,
+            line=line,
+            citation=citation.label(),
+        )
+        if severity == "error":
+            result.errors.append(finding)
+        else:
+            result.warnings.append(finding)
+        return
+
+    if fdiff.is_binary:
+        result.errors.append(
+            Finding(
+                severity="error",
+                code="binary_file_citation",
+                message=f"File `{citation.path}` is a binary diff and has no text line numbers.",
+                row=row,
+                line=line,
+                citation=citation.label(),
+            )
+        )
+        return
+
+    visible_map = fdiff.new_line_map() if citation.side == "new" else fdiff.old_line_map()
+    span = citation.end - citation.start + 1
+    # A reported range can be much larger than the actual diff.
+    ok, missing = (
+        fdiff.has_range(citation.start, citation.end, side=citation.side)
+        if span <= len(visible_map)
+        else (False, None)
+    )
+    if not ok:
+        if citation.side == "new" and span <= len(fdiff.old_line_map()):
+            old_ok, _ = fdiff.has_range(citation.start, citation.end, side="old")
+            if old_ok:
+                if missing is None:
+                    _, missing = fdiff.has_range(citation.start, citation.end, side="new")
+                result.errors.append(
+                    Finding(
+                        severity="error",
+                        code="deleted_line_cited_as_new",
+                        message=(
+                            f"Line(s) {format_line_ranges(missing)} of `{fdiff.canonical_path}` "
+                            "were deleted and exist only on the base (old) side; "
+                            "label the citation as `base` or cite visible new-side lines."
+                        ),
+                        row=row,
+                        line=line,
+                        citation=citation.label(),
+                    )
+                )
+                return
+
+        side_label = "new" if citation.side == "new" else "base (old)"
+        cited_lines = (
+            format_line_ranges(missing)
+            if missing is not None
+            else f"{citation.start}\u2013{citation.end}"
+        )
+        visible_str = format_line_ranges(visible_map.keys())
+        result.errors.append(
+            Finding(
+                severity="error",
+                code="line_out_of_hunk",
+                message=(
+                    f"Line(s) {cited_lines} of `{fdiff.canonical_path}` "
+                    f"are not visible in diff hunks on the {side_label} side "
+                    f"(visible {side_label} lines: {visible_str})."
+                ),
+                row=row,
+                line=line,
+                citation=citation.label(),
+            )
+        )
+
+
+def _verify_test_log(
+    test_log: str | None,
+    target_revision: str | None,
+    result: VerificationResult,
+    *,
+    strict_log_revision: bool,
+) -> None:
+    if test_log is None:
+        return
+    log_rev = extract_log_revision(test_log)
+    result.test_log_revision = log_rev
+    if log_rev is None:
+        result.warnings.append(
+            Finding(
+                severity="warning",
+                code="test_log_missing_revision",
+                message=(
+                    "Supplied test log declares no commit/revision SHA; "
+                    "test execution cannot be verified against the reviewed revision."
+                ),
+            )
+        )
+    elif target_revision is not None:
+        matched = revisions_match(target_revision, log_rev)
+        result.test_log_revision_matched = matched
+        if not matched:
+            severity: Severity = "error" if strict_log_revision else "warning"
+            finding = Finding(
+                severity=severity,
+                code="test_log_revision_mismatch",
+                message=(
+                    f"Test log revision `{log_rev[:12]}` does not match "
+                    f"diff revision `{target_revision[:12]}`."
+                ),
+            )
+            if severity == "error":
+                result.errors.append(finding)
+            else:
+                result.warnings.append(finding)
+
+
+def verify_citations(
+    text: str,
+    diff: str | ParsedDiff,
+    *,
+    test_log: str | None = None,
+    revision: str | None = None,
+    allow_external_files: bool = False,
+    strict_log_revision: bool = False,
+    require_citations: bool = False,
+) -> VerificationResult:
+    """Deterministically verify all `path:line` citations in arbitrary Markdown review text."""
+    parsed_diff = parse_unified_diff(diff) if isinstance(diff, str) else diff
+    target_revision = revision.strip().lower() if revision else parsed_diff.revision
+    result = VerificationResult(diff_revision=target_revision, mode="citations")
+
+    if not parsed_diff.files:
+        result.warnings.append(
+            Finding(
+                severity="warning",
+                code="empty_diff",
+                message="Unified diff contains no parsed file entries.",
+            )
+        )
+
+    available_files = parsed_diff.file_paths()
+    in_fence = False
+    fence_char = ""
+    fence_len = 0
+
+    for line_num, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        fence_match = _FENCE_RE.match(stripped)
+        if fence_match:
+            marker = fence_match.group(1)
+            if not in_fence:
+                in_fence = True
+                fence_char = marker[0]
+                fence_len = len(marker)
+            elif marker[0] == fence_char and len(marker) >= fence_len and stripped == marker:
+                in_fence = False
+            continue
+        if in_fence:
+            continue
+
+        for citation in extract_citations(line):
+            _verify_citation(
+                citation,
+                parsed_diff,
+                available_files,
+                result,
+                row=None,
+                line=line_num,
+                allow_external_files=allow_external_files,
+            )
+
+    if result.citation_count == 0:
+        finding = Finding(
+            severity="error" if require_citations else "warning",
+            code="no_citations_found",
+            message="No `path:line` diff citations were found in the input text.",
+        )
+        if require_citations:
+            result.errors.append(finding)
+        else:
+            result.warnings.append(finding)
+
+    _verify_test_log(
+        test_log,
+        target_revision,
+        result,
+        strict_log_revision=strict_log_revision,
+    )
+    return result
 
 
 def verify_report(
@@ -301,139 +542,21 @@ def verify_report(
             )
 
         for citation in row.citations:
-            result.citation_count += 1
-            if citation.start <= 0 or citation.end < citation.start:
-                result.errors.append(
-                    Finding(
-                        severity="error",
-                        code="invalid_line_range",
-                        message=(
-                            f"Invalid line range {citation.start}\u2013{citation.end} "
-                            "(lines must be positive and end >= start)."
-                        ),
-                        row=row.row_index,
-                        line=row.line_number,
-                        citation=citation.label(),
-                    )
-                )
-                continue
-
-            fdiff = parsed_diff.find_file(citation.path)
-            if fdiff is None:
-                severity: Severity = "warning" if allow_external_files else "error"
-                files_hint = ", ".join(available_files[:6]) if available_files else "none"
-                finding = Finding(
-                    severity=severity,
-                    code="external_file_citation" if allow_external_files else "unknown_file",
-                    message=(
-                        f"File `{citation.path}` is not present in the diff "
-                        f"(diff files: {files_hint})."
-                    ),
-                    row=row.row_index,
-                    line=row.line_number,
-                    citation=citation.label(),
-                )
-                if severity == "error":
-                    result.errors.append(finding)
-                else:
-                    result.warnings.append(finding)
-                continue
-
-            if fdiff.is_binary:
-                result.errors.append(
-                    Finding(
-                        severity="error",
-                        code="binary_file_citation",
-                        message=f"File `{citation.path}` is a binary diff and has no text line numbers.",
-                        row=row.row_index,
-                        line=row.line_number,
-                        citation=citation.label(),
-                    )
-                )
-                continue
-
-            visible_map = fdiff.new_line_map() if citation.side == "new" else fdiff.old_line_map()
-            span = citation.end - citation.start + 1
-            # A reported range can be much larger than the actual diff.
-            ok, missing = (
-                fdiff.has_range(citation.start, citation.end, side=citation.side)
-                if span <= len(visible_map)
-                else (False, None)
+            _verify_citation(
+                citation,
+                parsed_diff,
+                available_files,
+                result,
+                row=row.row_index,
+                line=row.line_number,
+                allow_external_files=allow_external_files,
             )
-            if not ok:
-                if citation.side == "new" and span <= len(fdiff.old_line_map()):
-                    old_ok, _ = fdiff.has_range(citation.start, citation.end, side="old")
-                    if old_ok:
-                        if missing is None:
-                            _, missing = fdiff.has_range(citation.start, citation.end, side="new")
-                        result.errors.append(
-                            Finding(
-                                severity="error",
-                                code="deleted_line_cited_as_new",
-                                message=(
-                                    f"Line(s) {format_line_ranges(missing)} of `{fdiff.canonical_path}` "
-                                    "were deleted and exist only on the base (old) side; "
-                                    "label the citation as `base` or cite visible new-side lines."
-                                ),
-                                row=row.row_index,
-                                line=row.line_number,
-                                citation=citation.label(),
-                            )
-                        )
-                        continue
 
-                side_label = "new" if citation.side == "new" else "base (old)"
-                cited_lines = (
-                    format_line_ranges(missing)
-                    if missing is not None
-                    else f"{citation.start}–{citation.end}"
-                )
-                visible_str = format_line_ranges(visible_map.keys())
-                result.errors.append(
-                    Finding(
-                        severity="error",
-                        code="line_out_of_hunk",
-                        message=(
-                            f"Line(s) {cited_lines} of `{fdiff.canonical_path}` "
-                            f"are not visible in diff hunks on the {side_label} side "
-                            f"(visible {side_label} lines: {visible_str})."
-                        ),
-                        row=row.row_index,
-                        line=row.line_number,
-                        citation=citation.label(),
-                    )
-                )
-
-    if test_log is not None:
-        log_rev = extract_log_revision(test_log)
-        result.test_log_revision = log_rev
-        if log_rev is None:
-            result.warnings.append(
-                Finding(
-                    severity="warning",
-                    code="test_log_missing_revision",
-                    message=(
-                        "Supplied test log declares no commit/revision SHA; "
-                        "test execution cannot be verified against the reviewed revision."
-                    ),
-                )
-            )
-        elif target_revision is not None:
-            matched = revisions_match(target_revision, log_rev)
-            result.test_log_revision_matched = matched
-            if not matched:
-                severity = "error" if strict_log_revision else "warning"
-                finding = Finding(
-                    severity=severity,
-                    code="test_log_revision_mismatch",
-                    message=(
-                        f"Test log revision `{log_rev[:12]}` does not match "
-                        f"diff revision `{target_revision[:12]}`."
-                    ),
-                )
-                if severity == "error":
-                    result.errors.append(finding)
-                else:
-                    result.warnings.append(finding)
+    _verify_test_log(
+        test_log,
+        target_revision,
+        result,
+        strict_log_revision=strict_log_revision,
+    )
 
     return result

@@ -15,13 +15,15 @@ from .packer import (
     PackError,
     ReviewBundle,
     fetch_github_bundle,
+    fetch_github_pr_diff,
     parse_pr_ref,
     render_bundle,
     run_git_diff,
+    run_git_staged_diff,
     write_bundle_dir,
 )
 from .runner import RunError, nonnegative_int, run_review
-from .verifier import FailGate, verify_report
+from .verifier import FailGate, verify_citations, verify_report
 
 
 def _configure_stdio() -> None:
@@ -178,6 +180,88 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output format (default: text).",
     )
 
+    # --- check ---
+    p_check = subparsers.add_parser(
+        "check",
+        help="Verify all `path:line` diff citations in ANY Markdown review (free-form or table).",
+    )
+    p_check.add_argument(
+        "--input",
+        default="-",
+        help="Path to Markdown review text (defaults to `-` for stdin).",
+    )
+    p_check.add_argument(
+        "--diff",
+        default=None,
+        help="Path to a local unified diff file.",
+    )
+    p_check.add_argument(
+        "--git-base",
+        default=None,
+        help="Generate diff locally from `<git-base>...<git-head>` using git.",
+    )
+    p_check.add_argument(
+        "--git-head",
+        default="HEAD",
+        help="Head git ref when using `--git-base` (default: HEAD).",
+    )
+    p_check.add_argument(
+        "--staged",
+        action="store_true",
+        help="Verify citations against staged git changes (`git diff --cached`).",
+    )
+    p_check.add_argument(
+        "--repo-dir",
+        default=None,
+        help="Repository directory when using `--git-base` or `--staged` (default: current directory).",
+    )
+    p_check.add_argument(
+        "--pr",
+        default=None,
+        help="Fetch the diff directly from a GitHub PR (`owner/repo#123` or URL).",
+    )
+    p_check.add_argument(
+        "--token",
+        default=None,
+        help="Optional GitHub API token when using `--pr` (defaults to `GITHUB_TOKEN` or `GH_TOKEN`).",
+    )
+    p_check.add_argument(
+        "--test-log",
+        default=None,
+        help="Optional test log file to check commit/revision alignment.",
+    )
+    p_check.add_argument(
+        "--revision",
+        default=None,
+        help="Optional reviewed commit SHA override (defaults to diff revision).",
+    )
+    p_check.add_argument(
+        "--allow-external-files",
+        action="store_true",
+        help="Downgrade citations to files absent from the diff from error to warning.",
+    )
+    p_check.add_argument(
+        "--strict-log-revision",
+        action="store_true",
+        help="Treat a mismatched test-log revision as an error instead of a warning.",
+    )
+    p_check.add_argument(
+        "--require-citations",
+        action="store_true",
+        help="Fail (exit 1) when the input contains zero `path:line` citations.",
+    )
+    p_check.add_argument(
+        "--strict-warnings",
+        action="store_true",
+        help="Fail check (exit 1) when any warning is emitted.",
+    )
+    p_check.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text).",
+    )
+
     # --- annotate ---
     p_annotate = subparsers.add_parser(
         "annotate",
@@ -280,6 +364,60 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     if result.gate_triggered(args.fail_on):
         return 2
     return 0
+
+
+def _cmd_check(args: argparse.Namespace) -> int:
+    sources = sum(bool(x) for x in (args.diff, args.git_base, args.staged, args.pr))
+    if sources == 0:
+        raise PackError(
+            "Specify one diff source: `--diff <file>`, `--git-base <ref>`, `--staged`, or `--pr <ref>`."
+        )
+    if sources > 1:
+        raise PackError(
+            "Specify only one diff source among `--diff`, `--git-base`, `--staged`, and `--pr`."
+        )
+
+    review_text = _read_text_arg(args.input)
+    test_log_text = _read_text_arg(args.test_log) if args.test_log else None
+    revision = args.revision
+
+    if args.diff:
+        diff_text = _read_text_arg(args.diff)
+    elif args.git_base:
+        cwd = Path(args.repo_dir) if args.repo_dir else None
+        diff_text, git_rev = run_git_diff(args.git_base, args.git_head, cwd=cwd)
+        revision = revision or git_rev
+    elif args.staged:
+        cwd = Path(args.repo_dir) if args.repo_dir else None
+        diff_text, git_rev = run_git_staged_diff(cwd=cwd)
+        revision = revision or git_rev
+    else:
+        pr_ref = parse_pr_ref(args.pr)
+        diff_text, pr_rev = fetch_github_pr_diff(pr_ref, token=args.token)
+        revision = revision or pr_rev
+
+    result = verify_citations(
+        review_text,
+        diff_text,
+        test_log=test_log_text,
+        revision=revision,
+        allow_external_files=args.allow_external_files,
+        strict_log_revision=args.strict_log_revision,
+        require_citations=args.require_citations,
+    )
+
+    if args.format == "json":
+        print(
+            json.dumps(
+                result.to_dict(strict_warnings=args.strict_warnings),
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+    else:
+        print(result.format_text(strict_warnings=args.strict_warnings))
+
+    return 0 if result.is_valid(strict_warnings=args.strict_warnings) else 1
 
 
 def _cmd_annotate(args: argparse.Namespace) -> int:
@@ -412,6 +550,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_demo()
         if args.command == "verify":
             return _cmd_verify(args)
+        if args.command == "check":
+            return _cmd_check(args)
         if args.command == "annotate":
             return _cmd_annotate(args)
         if args.command == "pack":

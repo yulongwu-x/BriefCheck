@@ -168,6 +168,57 @@ def run_git_diff(base_ref: str, head_ref: str = "HEAD", cwd: Path | None = None)
     return diff_proc.stdout, revision
 
 
+def run_git_staged_diff(cwd: Path | None = None) -> tuple[str, str | None]:
+    """Generate a unified diff of staged changes (`git diff --cached`) via local git."""
+    work_dir = str(cwd) if cwd else None
+    try:
+        diff_proc = subprocess.run(
+            ["git", "diff", "--no-color", "--no-ext-diff", "--cached"],
+            cwd=work_dir,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise PackError("`git` executable not found on PATH.") from exc
+
+    if diff_proc.returncode != 0:
+        raise PackError(f"`git diff --cached` failed: {diff_proc.stderr.strip()}")
+
+    rev_proc = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=work_dir,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    revision = rev_proc.stdout.strip().lower() if rev_proc.returncode == 0 else None
+    return diff_proc.stdout, revision
+
+
+def fetch_github_pr_diff(
+    pr_ref: PRRef,
+    *,
+    token: str | None = None,
+    api_base: str = "https://api.github.com",
+) -> tuple[str, str | None]:
+    """Fetch only the PR unified diff and head commit SHA from GitHub."""
+    api = api_base.rstrip("/")
+    pr_url = f"{api}/repos/{pr_ref.owner}/{pr_ref.repo}/pulls/{pr_ref.number}"
+    pr_data = json.loads(_github_request(pr_url, token=token))
+    head_sha = (pr_data.get("head") or {}).get("sha")
+    diff_text = _github_request(
+        pr_url,
+        accept="application/vnd.github.v3.diff",
+        token=token,
+    )
+    if isinstance(head_sha, str) and head_sha and not diff_text.startswith("From "):
+        diff_text = f"# Revision: {head_sha}\n" + diff_text
+    return diff_text, (head_sha.lower() if isinstance(head_sha, str) else None)
+
+
 def _github_request(
     url: str,
     *,

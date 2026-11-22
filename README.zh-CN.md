@@ -7,6 +7,8 @@
 
 BriefCheck 逐条核对 GitHub Issue 的验收要求与 PR 改动。**Agent Skill** 生成审查表，**零依赖 Python CLI** 按 diff 确定性校验引用行号，**GitHub Action** 自动生成、校验审查表并发布到 PR。
 
+![BriefCheck 确定性引用行号校验演示](docs/briefcheck-demo.png)
+
 ## 发布前抓出错误行号
 
 有 Python 3.10+ 就能试跑内置演示，无需准备 PR 或 API 密钥。

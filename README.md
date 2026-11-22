@@ -7,6 +7,8 @@ English | [简体中文](README.zh-CN.md) · [v0.3.0 release](https://github.com
 
 BriefCheck reviews pull requests against GitHub issue acceptance criteria. The **Agent Skill** drafts review tables, the **zero-dependency Python CLI** verifies diff citations deterministically, and the **GitHub Action** generates, verifies, and posts the review on the PR.
 
+![BriefCheck deterministic citation verification demo](docs/briefcheck-demo.png)
+
 ## Catch bad citations before posting
 
 With Python 3.10+ you can run the bundled demo without a PR or API key.

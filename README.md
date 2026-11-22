@@ -3,11 +3,18 @@
 [![CI](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml/badge.svg)](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-English | [简体中文](README.zh-CN.md) · [v0.2.0 release](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.2.0) · [GitHub Action setup](#use-the-github-action)
+English | [简体中文](README.zh-CN.md) · [v0.3.0 release](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.3.0) · [GitHub Action setup](#use-the-github-action)
 
 BriefCheck reviews pull requests against GitHub issue acceptance criteria. The **Agent Skill** drafts review tables, the **zero-dependency Python CLI** verifies diff citations deterministically, and the **GitHub Action** generates, verifies, and posts the review on the PR.
 
 ## Catch bad citations before posting
+
+With Python 3.10+ you can run the bundled demo without a PR or API key.
+
+```sh
+python -m pip install https://github.com/yulongwu-x/BriefCheck/releases/download/v0.3.0/briefcheck-0.3.0-py3-none-any.whl
+python -m briefcheck demo
+```
 
 This review cites `auth.py:3` as a new line even though the diff deleted it. It also cites `auth.py:99`, which is outside the visible diff. `briefcheck verify` reports both errors.
 
@@ -19,41 +26,7 @@ Errors (2):
   - [line_out_of_hunk] (row 1, line 3, auth.py:99) Line(s) 99 of `auth.py` are not visible in diff hunks on the new side (visible new lines: 1–2).
 ```
 
-Mark `auth.py:3` as `(base)` and change `auth.py:99` to `auth.py:2`. The same command returns `BriefCheck Verify: PASS`, and the review still records the requirement as `Contradicted`.
-
-<details>
-<summary>Run this example locally</summary>
-
-After [installing BriefCheck](#install), save these two files.
-
-`change.diff`
-
-```diff
-diff --git a/auth.py b/auth.py
---- a/auth.py
-+++ b/auth.py
-@@ -1,4 +1,2 @@
- def guard(user):
--    if not user.is_admin:
--        raise PermissionError()
-     return True
-```
-
-`review.md`
-
-```markdown
-| Acceptance requirement | Judgment | Evidence | Follow-up |
-| --- | --- | --- | --- |
-| Reject non-admins | Contradicted | `auth.py:3` is the removed error and `auth.py:99` returns True. | Restore the guard. |
-```
-
-Run the verifier on both files.
-
-```sh
-briefcheck verify --report review.md --diff change.diff
-```
-
-</details>
+The demo then marks `auth.py:3` as `(base)` and changes `auth.py:99` to `auth.py:2`. Verification returns `PASS`, and the review still records the requirement as `Contradicted`. [Inspect the demo inputs](src/briefcheck/demo.py).
 
 ## What BriefCheck includes
 
@@ -66,12 +39,14 @@ briefcheck verify --report review.md --diff change.diff
    - Flags deleted lines accidentally cited as new-side, out-of-hunk lines, unknown files, and test logs whose commit SHA does not match the reviewed diff.
    - Supports `--format json` and CI gates (`--fail-on contradicted|insufficient|unresolved`).
 
-## Install
+## Install from source
 
-Requires Python 3.10+ with **zero runtime dependencies**:
+Clone the repository to work with its sample files and Agent Skill. BriefCheck requires Python 3.10+ and has **zero runtime dependencies**.
 
 ```sh
-pip install -e .
+git clone https://github.com/yulongwu-x/BriefCheck.git
+cd BriefCheck
+python -m pip install -e .
 ```
 
 Or run directly from the repository without installing:
@@ -182,7 +157,7 @@ You can also pass `--pr owner/repo#123` or the same local Git range options as `
 
 ## Use the GitHub Action
 
-Add the following workflow at `.github/workflows/briefcheck.yml`. Configure the `OPENAI_API_KEY` repository secret and the `BRIEFCHECK_MODEL` variable. This workflow uses the [v0.2.0 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.2.0/action.yml).
+Add the following workflow at `.github/workflows/briefcheck.yml`. Configure the `OPENAI_API_KEY` repository secret and the `BRIEFCHECK_MODEL` variable. This workflow uses the [v0.3.0 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.3.0/action.yml).
 
 ~~~yaml
 name: BriefCheck review
@@ -203,7 +178,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: yulongwu-x/BriefCheck@v0.2.0
+      - uses: yulongwu-x/BriefCheck@v0.3.0
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           model: ${{ vars.BRIEFCHECK_MODEL }}
@@ -232,6 +207,8 @@ Pull requests from forks and pull requests with no linked Issue are reported as 
 | [`examples/prompt-injection-auth/`](examples/prompt-injection-auth) | Ignoring prompt-injection instructions embedded inside a diff + citing deleted code on the `base` (old) side. |
 | [`examples/retry-backoff/`](examples/retry-backoff) | Multi-hunk line tracking, splitting compound requirements, and flagging a revision-mismatched test log. |
 | [`examples/pandas-18676.md`](examples/pandas-18676.md) | Real-world public case study on `pandas` Issue #18676 / PR #19091 showing why test assertions alone do not prove runtime behavior. |
+
+Tried BriefCheck? [Share your result](https://github.com/yulongwu-x/BriefCheck/issues/new) with the version, the verifier output, and a public PR or a small sample if you can share it.
 
 ## Development
 

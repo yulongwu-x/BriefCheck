@@ -13,6 +13,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from . import __version__
 from .diff import annotate_diff, parse_unified_diff
 
 _PR_URL_RE = re.compile(
@@ -178,7 +179,7 @@ def _github_request(
 ) -> str:
     headers = {
         "Accept": accept,
-        "User-Agent": "briefcheck/0.1.0",
+        "User-Agent": f"briefcheck/{__version__}",
         "X-GitHub-Api-Version": "2022-11-28",
     }
     effective_token = token or os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")

@@ -3,11 +3,18 @@
 [![CI](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml/badge.svg)](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-[English](README.md) | 简体中文 · [v0.2.0 发布](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.2.0) · [配置 GitHub Action](#使用-github-action)
+[English](README.md) | 简体中文 · [v0.3.0 发布](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.3.0) · [配置 GitHub Action](#使用-github-action)
 
 BriefCheck 逐条核对 GitHub Issue 的验收要求与 PR 改动。**Agent Skill** 生成审查表，**零依赖 Python CLI** 按 diff 确定性校验引用行号，**GitHub Action** 自动生成、校验审查表并发布到 PR。
 
 ## 发布前抓出错误行号
+
+有 Python 3.10+ 就能试跑内置演示，无需准备 PR 或 API 密钥。
+
+```sh
+python -m pip install https://github.com/yulongwu-x/BriefCheck/releases/download/v0.3.0/briefcheck-0.3.0-py3-none-any.whl
+python -m briefcheck demo
+```
 
 这份审查把已删除的 `auth.py:3` 当成新侧行号，还引用了超出 diff 可见范围的 `auth.py:99`。`briefcheck verify` 会分别报错。
 
@@ -19,41 +26,7 @@ Errors (2):
   - [line_out_of_hunk] (row 1, line 3, auth.py:99) Line(s) 99 of `auth.py` are not visible in diff hunks on the new side (visible new lines: 1–2).
 ```
 
-把 `auth.py:3` 标为 `(base)`，再把 `auth.py:99` 改成 `auth.py:2`。用同一条命令重跑会得到 `BriefCheck Verify: PASS`，验收判断仍为「明确不符」。
-
-<details>
-<summary>在本地复现</summary>
-
-[安装 BriefCheck](#安装)后，保存下面两个文件。
-
-`change.diff`
-
-```diff
-diff --git a/auth.py b/auth.py
---- a/auth.py
-+++ b/auth.py
-@@ -1,4 +1,2 @@
- def guard(user):
--    if not user.is_admin:
--        raise PermissionError()
-     return True
-```
-
-`review.md`
-
-```markdown
-| Acceptance requirement | Judgment | Evidence | Follow-up |
-| --- | --- | --- | --- |
-| Reject non-admins | Contradicted | `auth.py:3` is the removed error and `auth.py:99` returns True. | Restore the guard. |
-```
-
-用这两个文件运行校验。
-
-```sh
-briefcheck verify --report review.md --diff change.diff
-```
-
-</details>
+演示接着把 `auth.py:3` 标为 `(base)`，并把 `auth.py:99` 改成 `auth.py:2`。修正后校验输出 `PASS`，验收判断仍为「明确不符」。[查看演示输入](src/briefcheck/demo.py)。
 
 ## 包含内容
 
@@ -66,12 +39,14 @@ briefcheck verify --report review.md --diff change.diff
    * 捕获把已删除行误标成新侧行号、越界行号、虚构文件名，以及测试日志与待审 diff 提交号不一致的问题；
    * 支持 `--format json` 输出和 CI 退出码门禁（`--fail-on contradicted|insufficient|unresolved`）。
 
-## 安装
+## 从源码安装
 
-需要 Python 3.10+，**无任何第三方运行时依赖**：
+克隆仓库即可使用其中的样例文件和 Agent Skill。BriefCheck 支持 Python 3.10+，**无第三方运行时依赖**。
 
 ```sh
-pip install -e .
+git clone https://github.com/yulongwu-x/BriefCheck.git
+cd BriefCheck
+python -m pip install -e .
 ```
 
 也可以不安装直接运行：
@@ -168,7 +143,7 @@ briefcheck run \
 
 ## 使用 GitHub Action
 
-将下面的工作流保存到 `.github/workflows/briefcheck.yml`。在仓库中配置 `OPENAI_API_KEY` Secret 和 `BRIEFCHECK_MODEL` 变量。下面的工作流使用 [v0.2.0 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.2.0/action.yml)。
+将下面的工作流保存到 `.github/workflows/briefcheck.yml`。在仓库中配置 `OPENAI_API_KEY` Secret 和 `BRIEFCHECK_MODEL` 变量。下面的工作流使用 [v0.3.0 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.3.0/action.yml)。
 
 ~~~yaml
 name: BriefCheck review
@@ -189,7 +164,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: yulongwu-x/BriefCheck@v0.2.0
+      - uses: yulongwu-x/BriefCheck@v0.3.0
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           model: ${{ vars.BRIEFCHECK_MODEL }}
@@ -218,6 +193,8 @@ Action 通过 GitHub 接口读取 Issue 和 PR diff，再发给所配置的模�
 | [`examples/prompt-injection-auth/`](examples/prompt-injection-auth) | 防御 diff 内嵌的 Prompt Injection 指令，并使用 `base` 旧侧行号引用被删除的权限检查代码。 |
 | [`examples/retry-backoff/`](examples/retry-backoff) | 同文件多 hunk 行号追踪、复合验收条件拆分，以及识别提交号不匹配的旧测试日志。 |
 | [`examples/pandas-18676.md`](examples/pandas-18676.md) | pandas Issue #18676 / PR #19091 公开案例及复现步骤。 |
+
+如果你试过 BriefCheck，欢迎[反馈结果](https://github.com/yulongwu-x/BriefCheck/issues/new)。可以带上版本、校验输出，以及方便公开的 PR 链接或最小样例。
 
 ## 运行测试
 

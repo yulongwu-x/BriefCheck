@@ -25,6 +25,16 @@ class CliTests(unittest.TestCase):
             code = main(argv)
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def test_demo_shows_rejected_and_corrected_citations(self) -> None:
+        code, out, err = self._run_cli(["demo"])
+        self.assertEqual((code, err), (0, ""))
+        failed, passed = out.split("After marking", 1)
+        self.assertIn("BriefCheck Verify: FAIL", failed)
+        self.assertIn("[deleted_line_cited_as_new]", failed)
+        self.assertIn("[line_out_of_hunk]", failed)
+        self.assertIn("BriefCheck Verify: PASS", passed)
+        self.assertIn("contradicted=1", passed)
+
     def test_verify_json_and_fail_on_gate(self) -> None:
         base = REPO_ROOT / "examples" / "csv-export"
         code, out, err = self._run_cli(

@@ -2,6 +2,18 @@
 
 All notable changes to BriefCheck will be documented in this file.
 
+## [0.3.0] - 2026-11-22
+
+### Added
+
+- `briefcheck demo` runs the verifier offline on a small diff and review. It shows a deleted-line citation on the wrong side, an out-of-hunk citation, and the result after fixing both.
+- A ready-to-install Python wheel on the GitHub release, with trial commands in both READMEs.
+
+### Changed
+
+- The pandas case study includes commands to fetch the review bundle and verify the report.
+- GitHub API requests identify the installed BriefCheck version in the user agent.
+
 ## [0.2.0] - 2026-11-22
 
 ### Added

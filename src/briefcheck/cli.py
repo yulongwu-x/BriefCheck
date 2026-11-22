@@ -9,6 +9,7 @@ import sys
 from typing import Sequence
 
 from . import __version__
+from .demo import run_demo
 from .diff import annotate_diff, parse_unified_diff
 from .packer import (
     PackError,
@@ -141,6 +142,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser("demo", help="Run an offline example of diff citation verification.")
 
     # --- verify ---
     p_verify = subparsers.add_parser(
@@ -405,6 +408,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if args.command == "demo":
+            return run_demo()
         if args.command == "verify":
             return _cmd_verify(args)
         if args.command == "annotate":

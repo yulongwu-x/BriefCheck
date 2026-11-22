@@ -6,9 +6,14 @@ Issue 报告了单列 CSV 的输出差异。导出时关闭表头和索引，首
 
 ## 复现
 
-1. 将 Issue 的原始描述复制到 `issue.md`，保留复现代码和期望输出。
-2. 将 PR 的统一 diff 保存为 `change.diff`。 [下载 diff](https://github.com/pandas-dev/pandas/pull/19091.diff)
-3. 在 Codex 中用 `$briefcheck` 审查这两份文件，得到输出后再对照下表。
+在 BriefCheck 仓库根目录运行下面两条命令。第一条拉取 Issue、PR diff 和行号映射，第二条校验下表的引用。
+
+```sh
+briefcheck pack --pr "pandas-dev/pandas#19091" --issue-number 18676 --annotate --include-skill --out-dir ./review-pandas-19091
+briefcheck verify --report examples/pandas-18676.md --diff ./review-pandas-19091/change.diff --strict-warnings
+```
+
+实跑结果为 `BriefCheck Verify: PASS`，核对了 3 处引用，待审提交为 `c8dd8135805a`。如遇 GitHub API 限流，可设置 `GITHUB_TOKEN` 后重试。需要独立审查时，在 Codex 中用 `$briefcheck` 读取输出目录的 `issue.md` 和 `change.diff`，完成后再对照下表。
 
 ## 审查结果
 

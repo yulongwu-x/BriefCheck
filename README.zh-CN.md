@@ -96,6 +96,64 @@ briefcheck pack \
 briefcheck annotate examples/csv-export/change.diff
 ```
 
+## 自动生成并校验审查报告
+
+在环境中设置 `OPENAI_API_KEY`，通过 `--model` 或 `OPENAI_MODEL` 指定模型。兼容服务可通过 `OPENAI_BASE_URL` 指定 API 基地址，例如 `https://provider.example/v1`。默认使用 OpenAI API 的 Chat Completions 格式。使用 Responses API 时传入 `--api responses`。
+
+~~~sh
+briefcheck run \
+  --issue examples/csv-export/issue.md \
+  --diff examples/csv-export/change.diff \
+  --test-log examples/csv-export/test-run.log \
+  --model YOUR_MODEL \
+  --output review.md \
+  --format json > verification.json
+~~~
+
+也可以传入 `--pr owner/repo#123`，或使用与 `pack` 相同的本地 Git 范围参数。`run` 会把带行号的材料发给模型，遇到引用或表格错误时默认要求模型修正一次。`--max-retries 0` 表示只生成一次。JSON 结果包含 Markdown 报告、校验发现、尝试次数和门禁结果。
+
+| 退出码 | 含义 |
+| --- | --- |
+| `0` | 报告通过校验，且通过所选门禁。 |
+| `1` | 输入、模型请求或报告校验失败。 |
+| `2` | 报告通过校验，但触发了所选的 `--fail-on` 门禁。 |
+
+## 使用 GitHub Action
+
+将下面的工作流保存到 `.github/workflows/briefcheck.yml`。在仓库中配置 `OPENAI_API_KEY` Secret 和 `BRIEFCHECK_MODEL` 变量。v0.2.0 标签发布后使用示例中的引用，开发测试时可改为包含 `action.yml` 的可信提交号。
+
+~~~yaml
+name: BriefCheck review
+"on":
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+
+concurrency:
+  group: briefcheck-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: yulongwu-x/BriefCheck@v0.2.0
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: ${{ vars.BRIEFCHECK_MODEL }}
+          fail-on: none
+~~~
+
+Action 通过 GitHub 接口读取 Issue 和 PR diff，再发给所配置的模型服务。运行时使用 BriefCheck 自身的 Action 文件。权限由调用工作流提供。`issues: read` 用于读取关联 Issue，`pull-requests: write` 用于更新 PR 评论。
+
+报告通过校验后，Action 以 GitHub Actions 机器人身份创建或原地更新一条评论，同时写入工作流摘要。`fail-on: contradicted` 会先发布有效报告，再让该次任务失败。工作流会取消同一 PR 的旧运行，发布前也会再次核对 PR head。
+
+外部 fork 的 PR 和缺少关联 Issue 的 PR 会显示为跳过。需要指定关联任务时可设置 `issue-number`，使用其他模型服务时可设置 `base-url` 和 `api`。
+
 ## 判断含义
 
 | 判断 | 英文对应 | 含义 |

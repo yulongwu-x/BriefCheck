@@ -2,6 +2,14 @@
 
 All notable changes to BriefCheck will be documented in this file.
 
+## [0.2.0] - 2026-11-22
+
+### Added
+- `briefcheck run` for OpenAI-compatible Chat Completions and Responses. It assembles annotated review material, verifies the generated table, and retries repairable report errors.
+- Markdown and JSON review output with distinct verification and judgment-gate exit codes.
+- A Composite GitHub Action that publishes a verified report in the job summary and creates or updates a single comment on the reviewed PR.
+- Mocked coverage for model requests, retries, gate outcomes, stale PR revisions, skipped reviews, and comment updates.
+
 ## [0.1.0] - 2026-11-22
 
 ### Added

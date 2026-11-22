@@ -1,0 +1,49 @@
+name: BriefCheck PR Review
+description: Verify a pull request against its Issue acceptance requirements and update one PR comment.
+inputs:
+  openai-api-key:
+    description: OpenAI-compatible API key supplied through a repository secret.
+    required: true
+  model:
+    description: Model name accepted by the configured provider.
+    required: true
+  api:
+    description: API format, chat or responses.
+    default: chat
+  base-url:
+    description: Optional OpenAI-compatible API base URL.
+    required: false
+  max-retries:
+    description: Additional model attempts to repair verification errors.
+    default: '1'
+  fail-on:
+    description: CI policy, one of none, contradicted, insufficient, or unresolved.
+    default: none
+  issue-number:
+    description: Optional Issue number in the repository, overriding automatic linking.
+    required: false
+outputs:
+  status:
+    description: Review outcome, one of reviewed, blocked, skipped, or error.
+    value: ${{ steps.review.outputs.status }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+    - id: review
+      name: Review and verify the pull request
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        OPENAI_MODEL: ${{ inputs.model }}
+        OPENAI_BASE_URL: ${{ inputs.base-url }}
+        BRIEFCHECK_API: ${{ inputs.api }}
+        BRIEFCHECK_MAX_RETRIES: ${{ inputs.max-retries }}
+        BRIEFCHECK_FAIL_ON: ${{ inputs.fail-on }}
+        BRIEFCHECK_ISSUE_NUMBER: ${{ inputs.issue-number }}
+      run: |
+        cd -- "$GITHUB_ACTION_PATH"
+        PYTHONPATH="$GITHUB_ACTION_PATH/src" python -B -P -m briefcheck.action

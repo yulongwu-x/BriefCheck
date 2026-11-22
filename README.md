@@ -112,6 +112,64 @@ base    13 | new    13 |       payload = render_report(report_id)
 base    14 | new    14 |       return payload
 ```
 
+## Generate and verify a report
+
+Set `OPENAI_API_KEY` in your environment. Pass a provider model with `--model` or set `OPENAI_MODEL`. Set `OPENAI_BASE_URL` to use a compatible endpoint, such as `https://provider.example/v1`. The default endpoint is OpenAI's API. Chat Completions is the default, and `--api responses` selects the Responses API.
+
+~~~sh
+briefcheck run \
+  --issue examples/csv-export/issue.md \
+  --diff examples/csv-export/change.diff \
+  --test-log examples/csv-export/test-run.log \
+  --model YOUR_MODEL \
+  --output review.md \
+  --format json > verification.json
+~~~
+
+You can also pass `--pr owner/repo#123` or the same local Git range options as `pack`. The command sends an annotated bundle to the provider and asks for one repair by default when the verifier finds a report error. Use `--max-retries 0` for a single attempt. The JSON contains the report, findings, number of attempts, and whether the selected judgment gate was triggered.
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | The report passed verification and the selected gate. |
+| `1` | Input, model request, or report verification failed. |
+| `2` | The report passed verification and triggered the selected `--fail-on` policy. |
+
+## Use the GitHub Action
+
+Add the following workflow at `.github/workflows/briefcheck.yml`. Configure the `OPENAI_API_KEY` repository secret and the `BRIEFCHECK_MODEL` variable. Use the tagged Action after v0.2.0 is published, or pin to a trusted commit containing `action.yml` while testing.
+
+~~~yaml
+name: BriefCheck review
+"on":
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+
+concurrency:
+  group: briefcheck-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: yulongwu-x/BriefCheck@v0.2.0
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: ${{ vars.BRIEFCHECK_MODEL }}
+          fail-on: none
+~~~
+
+The Action reads the Issue and PR diff through GitHub and sends them to the configured model provider. The runner uses BriefCheck's own Action files. Permissions apply to the calling workflow. `issues: read` lets the token read the linked Issue and `pull-requests: write` lets it update the PR comment.
+
+With a valid report, BriefCheck creates or updates one comment under the Actions bot account and writes the verified table to the job summary. A gate such as `fail-on: contradicted` publishes the report and then fails the job. The concurrency group cancels older runs for the same PR, and BriefCheck verifies the head again before publishing.
+
+Pull requests from forks and pull requests with no linked Issue are reported as skipped. Specify `issue-number` to select an Issue explicitly. For a different model provider, set the `base-url` and `api` inputs.
+
 ## Judgment scale
 
 | Judgment | Chinese label | Meaning |

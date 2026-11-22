@@ -19,6 +19,7 @@ from .packer import (
     run_git_diff,
     write_bundle_dir,
 )
+from .runner import RunError, nonnegative_int, run_review
 from .verifier import FailGate, verify_report
 
 
@@ -39,6 +40,89 @@ def _read_text_arg(path_str: str) -> str:
     if not path.is_file():
         raise FileNotFoundError(f"File not found: {path}")
     return path.read_text(encoding="utf-8")
+
+
+def _add_verification_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--allow-external-files",
+        action="store_true",
+        help="Downgrade citations to files absent from the diff from error to warning.",
+    )
+    parser.add_argument(
+        "--strict-log-revision",
+        action="store_true",
+        help="Treat a mismatched test-log revision as an error instead of a warning.",
+    )
+    parser.add_argument(
+        "--strict-warnings",
+        action="store_true",
+        help="Fail verification (exit 1) when any warning is emitted.",
+    )
+    parser.add_argument(
+        "--fail-on",
+        choices=["none", "contradicted", "insufficient", "unresolved"],
+        default="none",
+        help="Return exit code 2 when a valid report triggers the specified judgment gate.",
+    )
+
+
+def _add_source_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--pr",
+        default=None,
+        help="GitHub PR reference (`owner/repo#123` or full PR URL).",
+    )
+    parser.add_argument(
+        "--issue-number",
+        type=int,
+        default=None,
+        help="Explicit GitHub issue number when using `--pr` (auto-detected from PR body otherwise).",
+    )
+    parser.add_argument(
+        "--issue",
+        default=None,
+        help="Path to a local issue Markdown file.",
+    )
+    parser.add_argument(
+        "--diff",
+        default=None,
+        help="Path to a local unified diff file.",
+    )
+    parser.add_argument(
+        "--git-base",
+        default=None,
+        help="Generate diff locally from `<git-base>...<git-head>` using git.",
+    )
+    parser.add_argument(
+        "--git-head",
+        default="HEAD",
+        help="Head git ref when using `--git-base` (default: HEAD).",
+    )
+    parser.add_argument(
+        "--repo-dir",
+        default=None,
+        help="Repository directory when using `--git-base` (default: current directory).",
+    )
+    parser.add_argument(
+        "--test-log",
+        default=None,
+        help="Optional local test log file to include.",
+    )
+    parser.add_argument(
+        "--include-comments",
+        action="store_true",
+        help="When fetching from GitHub, include issue comments.",
+    )
+    parser.add_argument(
+        "--include-checks",
+        action="store_true",
+        help="When fetching from GitHub, include head-commit Check Runs summary.",
+    )
+    parser.add_argument(
+        "--token",
+        default=None,
+        help="Optional GitHub API token (defaults to `GITHUB_TOKEN` or `GH_TOKEN`).",
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -83,27 +167,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional reviewed commit SHA override (defaults to diff preamble revision).",
     )
-    p_verify.add_argument(
-        "--allow-external-files",
-        action="store_true",
-        help="Downgrade citations to files absent from the diff from error to warning.",
-    )
-    p_verify.add_argument(
-        "--strict-log-revision",
-        action="store_true",
-        help="Treat a mismatched test-log revision as an error instead of a warning.",
-    )
-    p_verify.add_argument(
-        "--strict-warnings",
-        action="store_true",
-        help="Fail verification (exit 1) when any warning is emitted.",
-    )
-    p_verify.add_argument(
-        "--fail-on",
-        choices=["none", "contradicted", "insufficient", "unresolved"],
-        default="none",
-        help="Return exit code 2 when a valid report triggers the specified judgment gate.",
-    )
+    _add_verification_options(p_verify)
     p_verify.add_argument(
         "--format",
         choices=["text", "json"],
@@ -132,57 +196,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "pack",
         help="Assemble issue, diff, and optional test logs into a framed review bundle.",
     )
-    p_pack.add_argument(
-        "--pr",
-        default=None,
-        help="GitHub PR reference (`owner/repo#123` or full PR URL).",
-    )
-    p_pack.add_argument(
-        "--issue-number",
-        type=int,
-        default=None,
-        help="Explicit GitHub issue number when using `--pr` (auto-detected from PR body otherwise).",
-    )
-    p_pack.add_argument(
-        "--issue",
-        default=None,
-        help="Path to a local issue Markdown file.",
-    )
-    p_pack.add_argument(
-        "--diff",
-        default=None,
-        help="Path to a local unified diff file.",
-    )
-    p_pack.add_argument(
-        "--git-base",
-        default=None,
-        help="Generate diff locally from `<git-base>...<git-head>` using git.",
-    )
-    p_pack.add_argument(
-        "--git-head",
-        default="HEAD",
-        help="Head git ref when using `--git-base` (default: HEAD).",
-    )
-    p_pack.add_argument(
-        "--repo-dir",
-        default=None,
-        help="Repository directory when using `--git-base` (default: current directory).",
-    )
-    p_pack.add_argument(
-        "--test-log",
-        default=None,
-        help="Optional local test log file to include.",
-    )
-    p_pack.add_argument(
-        "--include-comments",
-        action="store_true",
-        help="When fetching from GitHub, include issue comments.",
-    )
-    p_pack.add_argument(
-        "--include-checks",
-        action="store_true",
-        help="When fetching from GitHub, include head-commit Check Runs summary.",
-    )
+    _add_source_options(p_pack)
     p_pack.add_argument(
         "--annotate",
         action="store_true",
@@ -204,12 +218,32 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Write individual files (`issue.md`, `change.diff`, `bundle.md`, `metadata.json`) into this directory.",
     )
-    p_pack.add_argument(
-        "--token",
-        default=None,
-        help="Optional GitHub API token (defaults to `GITHUB_TOKEN` or `GH_TOKEN`).",
-    )
 
+    p_run = subparsers.add_parser(
+        "run",
+        help="Generate and verify an acceptance review with an OpenAI-compatible API.",
+    )
+    _add_source_options(p_run)
+    _add_verification_options(p_run)
+    p_run.add_argument("--model", help="Model name (defaults to OPENAI_MODEL).")
+    p_run.add_argument(
+        "--api", choices=["chat", "responses"], default="chat", help="Model API format."
+    )
+    p_run.add_argument(
+        "--max-retries",
+        type=nonnegative_int,
+        default=1,
+        help="Maximum retries for repairable report errors (default: 1).",
+    )
+    p_run.add_argument(
+        "-o", "--output", help="Write the generated Markdown report to this file."
+    )
+    p_run.add_argument(
+        "--format",
+        choices=["markdown", "json"],
+        default="markdown",
+        help="Write Markdown or the report with verification results as JSON to stdout.",
+    )
     return parser
 
 
@@ -256,7 +290,7 @@ def _cmd_annotate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_pack(args: argparse.Namespace) -> int:
+def _build_review_bundle(args: argparse.Namespace) -> ReviewBundle:
     test_log_text = _read_text_arg(args.test_log) if args.test_log else None
     test_log_source = args.test_log if args.test_log else None
 
@@ -302,6 +336,11 @@ def _cmd_pack(args: argparse.Namespace) -> int:
             test_log_source=test_log_source,
         )
 
+    return bundle
+
+
+def _cmd_pack(args: argparse.Namespace) -> int:
+    bundle = _build_review_bundle(args)
     if args.out_dir:
         bundle_path = write_bundle_dir(
             bundle,
@@ -324,6 +363,41 @@ def _cmd_pack(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_run(args: argparse.Namespace) -> int:
+    review = run_review(
+        _build_review_bundle(args),
+        model=args.model,
+        api=args.api,
+        max_retries=args.max_retries,
+        allow_external_files=args.allow_external_files,
+        strict_log_revision=args.strict_log_revision,
+        strict_warnings=args.strict_warnings,
+    )
+    result = review.verification
+    valid = result.is_valid(strict_warnings=args.strict_warnings)
+    gate_triggered = valid and result.gate_triggered(args.fail_on)
+
+    if args.output:
+        Path(args.output).write_text(review.report, encoding="utf-8")
+    if args.format == "json":
+        payload = result.to_dict(strict_warnings=args.strict_warnings)
+        payload.update(
+            report=review.report,
+            attempts=review.attempts,
+            gate={"fail_on": args.fail_on, "triggered": gate_triggered},
+        )
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        if not args.output:
+            sys.stdout.write(review.report)
+        if not valid:
+            print(result.format_text(strict_warnings=args.strict_warnings), file=sys.stderr)
+
+    if not valid:
+        return 1
+    return 2 if gate_triggered else 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point for the `briefcheck` console script."""
     _configure_stdio()
@@ -337,8 +411,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_annotate(args)
         if args.command == "pack":
             return _cmd_pack(args)
+        if args.command == "run":
+            return _cmd_run(args)
         parser.error(f"Unknown command: {args.command}")
-    except (FileNotFoundError, PackError) as exc:
+    except (OSError, PackError, RunError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     return 0

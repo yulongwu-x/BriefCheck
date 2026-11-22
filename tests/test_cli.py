@@ -5,9 +5,12 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
+from urllib.error import HTTPError
 
 from briefcheck.cli import main
 
@@ -82,6 +85,61 @@ class CliTests(unittest.TestCase):
             bundle_text = (out_dir / "bundle.md").read_text(encoding="utf-8")
             self.assertIn("<untrusted_artifact kind=\"issue\"", bundle_text)
             self.assertIn("## Annotated Diff Line Map (base | new)", bundle_text)
+
+    def _run_arguments(self) -> list[str]:
+        fixture = REPO_ROOT / "examples" / "csv-export"
+        return [
+            "run", "--issue", str(fixture / "issue.md"), "--diff", str(fixture / "change.diff"),
+            "--test-log", str(fixture / "test-run.log"), "--model", "test-model",
+        ]
+
+    def test_run_writes_markdown_and_json_before_returning_gate_code(self) -> None:
+        report = (REPO_ROOT / "examples" / "csv-export" / "expected.md").read_text(encoding="utf-8")
+        response = io.BytesIO(json.dumps({"choices": [{"message": {"content": report}}]}).encode("utf-8"))
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / "review.md"
+            with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+                with patch("briefcheck.runner.urlopen", return_value=response) as request:
+                    code, out, err = self._run_cli(
+                        self._run_arguments()
+                        + ["--output", str(target), "--format", "json", "--fail-on", "contradicted"]
+                    )
+
+            self.assertEqual(code, 2)
+            self.assertEqual(err, "")
+            payload = json.loads(out)
+            self.assertTrue(payload["valid"])
+            self.assertTrue(payload["gate"]["triggered"])
+            self.assertEqual(payload["attempts"], 1)
+            self.assertEqual(target.read_text(encoding="utf-8"), payload["report"])
+            request.assert_called_once()
+
+    def test_run_invalid_report_returns_json_error_after_repair_limit(self) -> None:
+        content = json.dumps({"choices": [{"message": {"content": "No table here."}}]}).encode("utf-8")
+        responses = [io.BytesIO(content), io.BytesIO(content)]
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            with patch("briefcheck.runner.urlopen", side_effect=responses) as request:
+                code, out, err = self._run_cli(self._run_arguments() + ["--format", "json"])
+
+        self.assertEqual(code, 1)
+        self.assertEqual(err, "")
+        payload = json.loads(out)
+        self.assertFalse(payload["valid"])
+        self.assertEqual(payload["attempts"], 2)
+        self.assertEqual(payload["errors"][0]["code"], "missing_table")
+        self.assertEqual(request.call_count, 2)
+
+    def test_run_api_failure_returns_exit_code_1(self) -> None:
+        error = HTTPError("https://model.example/v1/chat/completions", 401, "Unauthorized", None, None)
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            with patch("briefcheck.runner.urlopen", side_effect=error) as request:
+                code, out, err = self._run_cli(self._run_arguments())
+
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("HTTP 401", err)
+        self.assertNotIn("test-key", err)
+        request.assert_called_once()
 
     def test_missing_file_returns_exit_code_1(self) -> None:
         code, _, err = self._run_cli(["annotate", "does-not-exist.diff"])

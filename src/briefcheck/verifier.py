@@ -352,11 +352,20 @@ def verify_report(
                 )
                 continue
 
-            ok, missing = fdiff.has_range(citation.start, citation.end, side=citation.side)
+            visible_map = fdiff.new_line_map() if citation.side == "new" else fdiff.old_line_map()
+            span = citation.end - citation.start + 1
+            # A reported range can be much larger than the actual diff.
+            ok, missing = (
+                fdiff.has_range(citation.start, citation.end, side=citation.side)
+                if span <= len(visible_map)
+                else (False, None)
+            )
             if not ok:
-                if citation.side == "new":
+                if citation.side == "new" and span <= len(fdiff.old_line_map()):
                     old_ok, _ = fdiff.has_range(citation.start, citation.end, side="old")
                     if old_ok:
+                        if missing is None:
+                            _, missing = fdiff.has_range(citation.start, citation.end, side="new")
                         result.errors.append(
                             Finding(
                                 severity="error",
@@ -374,8 +383,10 @@ def verify_report(
                         continue
 
                 side_label = "new" if citation.side == "new" else "base (old)"
-                visible_map = (
-                    fdiff.new_line_map() if citation.side == "new" else fdiff.old_line_map()
+                cited_lines = (
+                    format_line_ranges(missing)
+                    if missing is not None
+                    else f"{citation.start}–{citation.end}"
                 )
                 visible_str = format_line_ranges(visible_map.keys())
                 result.errors.append(
@@ -383,7 +394,7 @@ def verify_report(
                         severity="error",
                         code="line_out_of_hunk",
                         message=(
-                            f"Line(s) {format_line_ranges(missing)} of `{fdiff.canonical_path}` "
+                            f"Line(s) {cited_lines} of `{fdiff.canonical_path}` "
                             f"are not visible in diff hunks on the {side_label} side "
                             f"(visible {side_label} lines: {visible_str})."
                         ),

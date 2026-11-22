@@ -65,7 +65,7 @@ python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-githu
   --repo yulongwu-x/BriefCheck --path .agents/skills/briefcheck --name briefcheck
 
 # Claude Code
-git clone https://github.com/yulongwu-x/BriefCheck.git && cp -r BriefCheck/.agents/skills/briefcheck ~/.claude/skills/
+git clone https://github.com/yulongwu-x/BriefCheck.git && mkdir -p ~/.claude/skills && cp -r BriefCheck/.agents/skills/briefcheck ~/.claude/skills/
 ```
 
 ## Quickstart

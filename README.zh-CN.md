@@ -57,6 +57,17 @@ python -m pip install -e .
 PYTHONPATH=src python -m briefcheck --help
 ```
 
+只安装 Agent Skill 到 Codex 或 Claude Code：
+
+```sh
+# Codex
+python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
+  --repo yulongwu-x/BriefCheck --path .agents/skills/briefcheck --name briefcheck
+
+# Claude Code
+git clone https://github.com/yulongwu-x/BriefCheck.git && cp -r BriefCheck/.agents/skills/briefcheck ~/.claude/skills/
+```
+
 ## 快速试用
 
 ### 1. 用 Agent Skill 审查样例

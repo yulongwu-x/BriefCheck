@@ -1,5 +1,8 @@
 name: BriefCheck PR Review
 description: Verify a pull request against its Issue acceptance requirements and update one PR comment.
+branding:
+  icon: check-square
+  color: blue
 inputs:
   openai-api-key:
     description: OpenAI-compatible API key supplied through a repository secret.

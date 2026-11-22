@@ -57,6 +57,17 @@ Or run directly from the repository without installing:
 PYTHONPATH=src python -m briefcheck --help
 ```
 
+To install just the Agent Skill into Codex or Claude Code:
+
+```sh
+# Codex
+python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
+  --repo yulongwu-x/BriefCheck --path .agents/skills/briefcheck --name briefcheck
+
+# Claude Code
+git clone https://github.com/yulongwu-x/BriefCheck.git && cp -r BriefCheck/.agents/skills/briefcheck ~/.claude/skills/
+```
+
 ## Quickstart
 
 ### 1. Run the Agent Skill on a fixture

@@ -1,0 +1,10 @@
+Revision (fixture head): dcd899c57675bee1b345c6973d6a8a6b171c2242
+Command: python -m unittest discover -s tests -v
+Exit code: 0
+
+test_keeps_chinese_filename (test_export.ExportCsvTests.test_keeps_chinese_filename) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.021s
+
+OK

@@ -1,0 +1,45 @@
+From dcd899c57675bee1b345c6973d6a8a6b171c2242 Mon Sep 17 00:00:00 2001
+From: BriefCheck Fixtures <fixtures@briefcheck.invalid>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Preserve the requested CSV filename
+
+
+diff --git a/export.py b/export.py
+index ed25481..7552cd1 100644
+--- a/export.py
++++ b/export.py
+@@ -1,13 +1,13 @@
+ import csv
+ from pathlib import Path
+ 
+ 
+ def export_csv(path: Path, rows: list[tuple[str, int]]) -> Path:
+-    output = path.with_name("export.csv")
++    output = path
+     with output.open("w", encoding="utf-8", newline="") as stream:
+         writer = csv.writer(stream)
+         if not rows:
+             return output
+         writer.writerow(("name", "count"))
+         writer.writerows(rows)
+     return output
+diff --git a/tests/test_export.py b/tests/test_export.py
+new file mode 100644
+index 0000000..10a88cd
+--- /dev/null
++++ b/tests/test_export.py
+@@ -0,0 +1,14 @@
++from pathlib import Path
++from tempfile import TemporaryDirectory
++from unittest import TestCase
++
++from export import export_csv
++
++
++class ExportCsvTests(TestCase):
++    def test_keeps_chinese_filename(self):
++        with TemporaryDirectory() as directory:
++            path = Path(directory) / "统计.csv"
++            result = export_csv(path, [("tea", 2)])
++            self.assertEqual(result, path)
++            self.assertEqual(path.read_text(encoding="utf-8"), "name,count\ntea,2\n")

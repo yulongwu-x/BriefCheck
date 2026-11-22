@@ -2,6 +2,13 @@
 
 All notable changes to BriefCheck will be documented in this file.
 
+## [0.3.1] - 2026-11-22
+
+### Added
+- GitHub Actions Marketplace branding (`check-square` / `blue`) in `action.yml`.
+- Visual citation verification demo card (`docs/briefcheck-demo.png`) embedded in both READMEs.
+- GitHub Issue templates for bug reports and review fixtures, plus one-line Codex and Claude Code skill install snippets.
+
 ## [0.3.0] - 2026-11-22
 
 ### Added

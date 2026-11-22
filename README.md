@@ -3,7 +3,7 @@
 [![CI](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml/badge.svg)](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-English | [简体中文](README.zh-CN.md) · [v0.3.0 release](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.3.0) · [GitHub Action setup](#use-the-github-action)
+English | [简体中文](README.zh-CN.md) · [v0.3.1 release](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.3.1) · [GitHub Action setup](#use-the-github-action)
 
 BriefCheck reviews pull requests against GitHub issue acceptance criteria. The **Agent Skill** drafts review tables, the **zero-dependency Python CLI** verifies diff citations deterministically, and the **GitHub Action** generates, verifies, and posts the review on the PR.
 
@@ -14,7 +14,7 @@ BriefCheck reviews pull requests against GitHub issue acceptance criteria. The *
 With Python 3.10+ you can run the bundled demo without a PR or API key.
 
 ```sh
-python -m pip install https://github.com/yulongwu-x/BriefCheck/releases/download/v0.3.0/briefcheck-0.3.0-py3-none-any.whl
+python -m pip install https://github.com/yulongwu-x/BriefCheck/releases/download/v0.3.1/briefcheck-0.3.1-py3-none-any.whl
 python -m briefcheck demo
 ```
 
@@ -170,7 +170,7 @@ You can also pass `--pr owner/repo#123` or the same local Git range options as `
 
 ## Use the GitHub Action
 
-Add the following workflow at `.github/workflows/briefcheck.yml`. Configure the `OPENAI_API_KEY` repository secret and the `BRIEFCHECK_MODEL` variable. This workflow uses the [v0.3.0 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.3.0/action.yml).
+Add the following workflow at `.github/workflows/briefcheck.yml`. Configure the `OPENAI_API_KEY` repository secret and the `BRIEFCHECK_MODEL` variable. This workflow uses the [v0.3.1 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.3.1/action.yml).
 
 ~~~yaml
 name: BriefCheck review
@@ -191,7 +191,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: yulongwu-x/BriefCheck@v0.3.0
+      - uses: yulongwu-x/BriefCheck@v0.3.1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           model: ${{ vars.BRIEFCHECK_MODEL }}

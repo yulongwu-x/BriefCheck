@@ -3,7 +3,7 @@
 [![CI](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml/badge.svg)](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-[English](README.md) | 简体中文 · [v0.3.0 发布](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.3.0) · [配置 GitHub Action](#使用-github-action)
+[English](README.md) | 简体中文 · [v0.3.1 发布](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.3.1) · [配置 GitHub Action](#使用-github-action)
 
 BriefCheck 逐条核对 GitHub Issue 的验收要求与 PR 改动。**Agent Skill** 生成审查表，**零依赖 Python CLI** 按 diff 确定性校验引用行号，**GitHub Action** 自动生成、校验审查表并发布到 PR。
 
@@ -14,7 +14,7 @@ BriefCheck 逐条核对 GitHub Issue 的验收要求与 PR 改动。**Agent Skil
 有 Python 3.10+ 就能试跑内置演示，无需准备 PR 或 API 密钥。
 
 ```sh
-python -m pip install https://github.com/yulongwu-x/BriefCheck/releases/download/v0.3.0/briefcheck-0.3.0-py3-none-any.whl
+python -m pip install https://github.com/yulongwu-x/BriefCheck/releases/download/v0.3.1/briefcheck-0.3.1-py3-none-any.whl
 python -m briefcheck demo
 ```
 
@@ -156,7 +156,7 @@ briefcheck run \
 
 ## 使用 GitHub Action
 
-将下面的工作流保存到 `.github/workflows/briefcheck.yml`。在仓库中配置 `OPENAI_API_KEY` Secret 和 `BRIEFCHECK_MODEL` 变量。下面的工作流使用 [v0.3.0 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.3.0/action.yml)。
+将下面的工作流保存到 `.github/workflows/briefcheck.yml`。在仓库中配置 `OPENAI_API_KEY` Secret 和 `BRIEFCHECK_MODEL` 变量。下面的工作流使用 [v0.3.1 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.3.1/action.yml)。
 
 ~~~yaml
 name: BriefCheck review
@@ -177,7 +177,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: yulongwu-x/BriefCheck@v0.3.0
+      - uses: yulongwu-x/BriefCheck@v0.3.1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           model: ${{ vars.BRIEFCHECK_MODEL }}

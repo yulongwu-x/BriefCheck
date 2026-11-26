@@ -25,4 +25,4 @@ Use the user's language for labels and commentary. Keep each actionable requirem
 | Acceptance requirement | Judgment | Evidence | Follow-up |
 | --- | --- | --- | --- |
 
-If the `briefcheck` CLI is available in the workspace, you may run `briefcheck annotate <diff>` to confirm exact `base`/`new` line numbers and `briefcheck verify` to check the finished table before returning it.
+If the `briefcheck` CLI or MCP server (`briefcheck mcp`) is available in the workspace, run `briefcheck annotate <diff>` (or `briefcheck_annotate_diff`) to confirm exact `base`/`new` line numbers and `briefcheck verify` (or `briefcheck_verify_report`) to validate the finished table before returning it.

@@ -2,6 +2,14 @@
 
 All notable changes to BriefCheck will be documented in this file.
 
+## [0.5.0] - 2026-11-26
+
+### Added
+- `briefcheck mcp`: built-in zero-dependency Model Context Protocol (MCP) stdio server exposing `briefcheck_annotate_diff`, `briefcheck_check_citations`, `briefcheck_verify_report`, and `briefcheck_pack_review` for Claude Code, Codex CLI, Cursor, Windsurf, and other MCP clients.
+- `briefcheck check --pr-comments [--author <login>]`: fetch and audit existing GitHub PR comments, review bodies, and inline review comments directly against the PR diff.
+- Citation extraction support for GitHub line anchors (`path#L12`, `path#L12-L20`) and compiler/IDE column locations (`path:line:col`) while filtering out raw `http(s)://` URLs.
+- Interactive client-side Browser Playground (`docs/index.html`) hosted on GitHub Pages so visitors can test deterministic diff citation verification live without installing anything.
+
 ## [0.4.0] - 2026-11-22
 
 ### Added

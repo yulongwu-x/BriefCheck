@@ -40,3 +40,7 @@ jobs:
           briefcheck verify --report examples/prompt-injection-auth/expected.md --diff examples/prompt-injection-auth/change.diff --strict-warnings
           briefcheck verify --report examples/retry-backoff/expected.md --diff examples/retry-backoff/change.diff --test-log examples/retry-backoff/test-run.log
           briefcheck check --input examples/prompt-injection-auth/expected.md --diff examples/prompt-injection-auth/change.diff --require-citations --strict-warnings
+
+      - name: Smoke test MCP stdio server
+        run: |
+          python -c "import json, subprocess, sys; req = json.dumps({'jsonrpc':'2.0','id':1,'method':'tools/list'}) + '\n'; p = subprocess.run([sys.executable, '-m', 'briefcheck', 'mcp'], input=req, text=True, capture_output=True, check=True); data = json.loads(p.stdout.strip()); assert len(data['result']['tools']) == 4, data"

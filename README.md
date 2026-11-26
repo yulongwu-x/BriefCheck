@@ -3,31 +3,66 @@
 [![CI](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml/badge.svg)](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-English | [简体中文](README.zh-CN.md) · [v0.4.0 release](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.4.0) · [GitHub Action setup](#use-the-github-action)
+English | [简体中文](README.zh-CN.md) · [**Live Playground**](https://yulongwu-x.github.io/BriefCheck/) · [v0.5.0 release](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.5.0) · [MCP server](#run-as-an-mcp-server-claude-code--codex--cursor) · [GitHub Action](#use-the-github-action)
 
-BriefCheck catches hallucinated diff citations in AI PR reviews and verifies pull requests against GitHub issue acceptance criteria. Pipe **any** AI review (Claude Code, Codex, Cursor, or custom prompts) through `briefcheck check`, or pair the **Agent Skill**, **zero-dependency Python CLI**, and **GitHub Action** for end-to-end acceptance audits.
+BriefCheck catches hallucinated diff citations in AI PR reviews and verifies pull requests against GitHub issue acceptance criteria. Pipe **any** AI review (Claude Code, Codex, Cursor, Copilot, or custom prompts) through `briefcheck check`, attach BriefCheck natively via its **zero-dependency MCP server (`briefcheck mcp`)**, or pair the **Agent Skill**, **Python CLI**, and **GitHub Action** for end-to-end acceptance audits.
 
 ![BriefCheck deterministic citation verification demo](docs/briefcheck-demo.png)
 
+> **Try it in your browser (no install):** [yulongwu-x.github.io/BriefCheck](https://yulongwu-x.github.io/BriefCheck/) — paste any git diff + AI review to verify citations live.
+
 ## Pipe any AI review through `briefcheck check`
 
-Already using Claude Code, Codex, or your own PR-review prompt? Verify every `path:line` citation in free-form Markdown against the real git diff (reads from `stdin` by default, skips fenced code blocks, supports `--git-base`, `--staged`, `--diff`, or `--pr`):
+Already using Claude Code, Codex, Cursor, or your own PR-review prompt? Verify every `path:line`, `path:start–end`, `path:line:col`, and GitHub `path#L12-L20` citation in free-form Markdown against the real git diff (reads from `stdin` by default, skips fenced code blocks, supports `--git-base`, `--staged`, `--diff`, `--pr`, and `--pr-comments`):
 
 ```sh
 # Check Claude Code or Codex output against your branch diff
 claude -p "Review git diff with file:line citations" | briefcheck check --git-base origin/main
 codex exec "Review my staged changes with file:line citations" | briefcheck check --staged
 
+# Audit existing AI or human review comments already posted on a GitHub PR
+briefcheck check --pr owner/repo#123 --pr-comments
+briefcheck check --pr owner/repo#123 --pr-comments --author "coderabbitai[bot]"
+
 # Or check any saved Markdown review directly against a GitHub PR
 briefcheck check --input review.md --pr owner/repo#123 --require-citations
 ```
 
-## Catch bad citations before posting
+## Run as an MCP server (Claude Code / Codex / Cursor)
 
-With Python 3.10+ you can run the bundled demo without a PR or API key.
+BriefCheck ships a built-in **zero-dependency MCP stdio server** (`briefcheck mcp`) exposing four deterministic tools (`briefcheck_annotate_diff`, `briefcheck_check_citations`, `briefcheck_verify_report`, and `briefcheck_pack_review`), so your coding agent can inspect exact `base | new` line numbers and self-verify citations before replying:
 
 ```sh
-python -m pip install https://github.com/yulongwu-x/BriefCheck/releases/download/v0.4.0/briefcheck-0.4.0-py3-none-any.whl
+# Claude Code
+claude mcp add briefcheck -- briefcheck mcp
+
+# OpenAI Codex CLI
+codex mcp add briefcheck -- briefcheck mcp
+```
+
+Or add to Cursor / Windsurf / VS Code / Antigravity MCP config (`mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "briefcheck": {
+      "command": "briefcheck",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+## Catch bad citations before posting
+
+With Python 3.10+ you can run the bundled demo without a PR or API key:
+
+```sh
+# Zero-install trial with uvx
+uvx --from git+https://github.com/yulongwu-x/BriefCheck briefcheck demo
+
+# Or install the prebuilt zero-dependency wheel
+python -m pip install https://github.com/yulongwu-x/BriefCheck/releases/download/v0.5.0/briefcheck-0.5.0-py3-none-any.whl
 python -m briefcheck demo
 ```
 
@@ -183,7 +218,7 @@ You can also pass `--pr owner/repo#123` or the same local Git range options as `
 
 ## Use the GitHub Action
 
-Add the following workflow at `.github/workflows/briefcheck.yml`. Configure the `OPENAI_API_KEY` repository secret and the `BRIEFCHECK_MODEL` variable. This workflow uses the [v0.4.0 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.4.0/action.yml).
+Add the following workflow at `.github/workflows/briefcheck.yml`. Configure the `OPENAI_API_KEY` repository secret and the `BRIEFCHECK_MODEL` variable. This workflow uses the [v0.5.0 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.5.0/action.yml).
 
 ~~~yaml
 name: BriefCheck review
@@ -204,7 +239,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: yulongwu-x/BriefCheck@v0.4.0
+      - uses: yulongwu-x/BriefCheck@v0.5.0
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           model: ${{ vars.BRIEFCHECK_MODEL }}

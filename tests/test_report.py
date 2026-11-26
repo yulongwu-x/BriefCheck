@@ -56,6 +56,22 @@ class ReportParserTests(unittest.TestCase):
         ]
         self.assertEqual(citations, expected)
 
+    def test_extract_citations_github_anchors_and_line_column_and_url_filtering(self) -> None:
+        text = (
+            "Check `src/auth.py#L12`, [src/auth.py#L14-L18](https://github.com/org/repo/blob/main/src/auth.py#L14-L18), "
+            "`api/views.py:42:7`, `base:old_auth.py#L3`, and `src/guard.py#L5-L6` (base). "
+            "Ignore raw URL https://github.com/org/repo/blob/abc123/src/ignored.py#L99 and timestamp 12:34:56."
+        )
+        citations = extract_citations(text)
+        expected = [
+            Citation(path="src/auth.py", start=12, end=12, side="new", raw="src/auth.py#L12"),
+            Citation(path="src/auth.py", start=14, end=18, side="new", raw="src/auth.py#L14-L18"),
+            Citation(path="api/views.py", start=42, end=42, side="new", raw="api/views.py:42:7"),
+            Citation(path="old_auth.py", start=3, end=3, side="old", raw="base:old_auth.py#L3"),
+            Citation(path="src/guard.py", start=5, end=6, side="old", raw="src/guard.py#L5-L6"),
+        ]
+        self.assertEqual(citations, expected)
+
     def test_parse_report_ignores_fenced_tables_and_selects_report_table(self) -> None:
         md = """\
 Here is a legend:

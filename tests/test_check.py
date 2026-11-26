@@ -142,6 +142,32 @@ Looks risky:
         self.assertEqual(code2, 1)
         self.assertIn("Specify only one diff source", err2)
 
+    def test_cli_check_pr_comments_and_author_filter(self) -> None:
+        responses = [
+            json.dumps([{"user": {"login": "human"}, "body": "Looks good at `auth.py:2`."}]),
+            json.dumps([{"user": {"login": "coderabbitai[bot]"}, "body": "Broken check at `auth.py:3`."}]),
+            json.dumps([]),
+        ]
+        with (
+            patch("briefcheck.cli.fetch_github_pr_diff", return_value=(_SAMPLE_DIFF, "abcdef1234567")),
+            patch("briefcheck.packer._github_request", side_effect=responses),
+        ):
+            code, out, err = self._run_cli(
+                ["check", "--pr", "org/repo#12", "--pr-comments", "--author", "@coderabbitai[bot]", "--format", "json"]
+            )
+        self.assertEqual((code, err), (1, ""))
+        payload = json.loads(out)
+        self.assertEqual(payload["pr_comments_checked"], 1)
+        self.assertEqual([e["code"] for e in payload["errors"]], ["deleted_line_cited_as_new"])
+
+        code_bad, _, err_bad = self._run_cli(["check", "--staged", "--pr-comments"])
+        self.assertEqual(code_bad, 1)
+        self.assertIn("--pr-comments", err_bad)
+
+        code_author, _, err_author = self._run_cli(["check", "--staged", "--author", "bot"])
+        self.assertEqual(code_author, 1)
+        self.assertIn("--author", err_author)
+
 
 if __name__ == "__main__":
     unittest.main()

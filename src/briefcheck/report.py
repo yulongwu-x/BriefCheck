@@ -52,9 +52,9 @@ _HEADER_FOLLOWUP_TOKENS = {
 _DELIMITER_CELL_RE = re.compile(r"^:?-{3,}:?$")
 _IPV4_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
 
-# Matches `path:line` or `path:start-end` / `path:start–end` where path contains
-# either a slash, a filename extension, or a common extensionless repo filename
-# (avoiding plain prose like `note:12`).
+# Matches `path:line`, `path:start-end`, `path:line:col`, or GitHub-style
+# `path#L12` / `path#L12-L20` where path contains a slash, a filename extension,
+# or a common extensionless repo filename (avoiding plain prose like `note:12`).
 _CITATION_RE = re.compile(
     r"(?<![A-Za-z0-9_./:-])"
     r"(?:(?P<prefix>base|old):)?"
@@ -63,8 +63,10 @@ _CITATION_RE = re.compile(
     r"|[A-Za-z0-9_.@+-]+\.[A-Za-z][A-Za-z0-9_+-]*"
     r"|(?:Makefile|Dockerfile|Procfile|Justfile|Jenkinsfile|Vagrantfile|Gemfile|Rakefile|Brewfile)"
     r")"
-    r":L?(?P<start>\d+)"
-    r"(?:[\-\u2013\u2014]L?(?P<end>\d+))?"
+    r"(?:"
+    r":L?(?P<c_start>\d+)(?:(?:[\-\u2013\u2014]L?(?P<c_end>\d+))|:(?P<col>\d+))?"
+    r"|#L(?P<h_start>\d+)(?:[\-\u2013\u2014]L?(?P<h_end>\d+))?"
+    r")"
     r"(?![:\d])"
 )
 
@@ -187,20 +189,33 @@ def _header_score(headers: list[str]) -> int:
     return score
 
 
+_URL_DELIM_RE = re.compile(r"[\s(\[<>\"'`]")
+
+
+def _is_inside_url(text: str, pos: int) -> bool:
+    """Return True if `pos` falls inside an `http://` or `https://` URL token."""
+    start = pos
+    while start > 0 and not _URL_DELIM_RE.match(text[start - 1]):
+        start -= 1
+    prefix = text[start:pos].lower()
+    return "://" in prefix
+
+
 def extract_citations(text: str) -> list[Citation]:
-    """Extract all file:line / file:start-end citations from an evidence string."""
+    """Extract all file:line / file:start-end / file#Lline citations from text."""
     citations: list[Citation] = []
     for match in _CITATION_RE.finditer(text):
         path = match.group("path")
-        # Exclude IPv4 addresses (e.g. 127.0.0.1:9222) and URL schemes (http://...).
+        # Exclude IPv4 addresses (e.g. 127.0.0.1:9222) and embedded http(s) URLs.
         if _IPV4_RE.match(path):
             continue
-        before_all = text[: match.start()]
-        if before_all.endswith("://"):
+        if _is_inside_url(text, match.start()):
             continue
 
-        start = int(match.group("start"))
-        end = int(match.group("end")) if match.group("end") is not None else start
+        start_str = match.group("c_start") or match.group("h_start")
+        end_str = match.group("c_end") or match.group("h_end")
+        start = int(start_str)
+        end = int(end_str) if end_str is not None else start
         side: Literal["new", "old"] = "new"
 
         if match.group("prefix"):

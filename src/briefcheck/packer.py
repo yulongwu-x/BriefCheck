@@ -219,6 +219,71 @@ def fetch_github_pr_diff(
     return diff_text, (head_sha.lower() if isinstance(head_sha, str) else None)
 
 
+def _fetch_paginated_list(
+    url: str,
+    *,
+    token: str | None = None,
+    max_pages: int = 5,
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    sep = "&" if "?" in url else "?"
+    for page in range(1, max_pages + 1):
+        batch = json.loads(_github_request(f"{url}{sep}per_page=100&page={page}", token=token))
+        if not isinstance(batch, list):
+            break
+        items.extend(entry for entry in batch if isinstance(entry, dict))
+        if len(batch) < 100:
+            break
+    return items
+
+
+def fetch_github_pr_comments(
+    pr_ref: PRRef,
+    *,
+    author: str | None = None,
+    token: str | None = None,
+    api_base: str = "https://api.github.com",
+) -> tuple[str, int]:
+    """Fetch PR issue comments, review summaries, and inline review comments as Markdown."""
+    api = api_base.rstrip("/")
+    repo_api = f"{api}/repos/{pr_ref.owner}/{pr_ref.repo}"
+    target_author = author.strip().lstrip("@").casefold() if author and author.strip() else None
+
+    issue_comments = _fetch_paginated_list(
+        f"{repo_api}/issues/{pr_ref.number}/comments", token=token
+    )
+    reviews = _fetch_paginated_list(
+        f"{repo_api}/pulls/{pr_ref.number}/reviews", token=token
+    )
+    review_comments = _fetch_paginated_list(
+        f"{repo_api}/pulls/{pr_ref.number}/comments", token=token
+    )
+
+    sections: list[str] = []
+    for kind, records in (
+        ("PR comment", issue_comments),
+        ("PR review", reviews),
+        ("Inline review comment", review_comments),
+    ):
+        for item in records:
+            login = ((item.get("user") or {}).get("login") or "").strip()
+            body = (item.get("body") or "").strip()
+            if not body:
+                continue
+            if target_author and login.casefold() != target_author:
+                continue
+            header = f"### {kind} by @{login or 'unknown'}"
+            sections.append(f"{header}\n\n{body}")
+
+    if not sections:
+        who = f" by @{target_author}" if target_author else ""
+        raise PackError(
+            f"No non-empty review comments{who} found on "
+            f"{pr_ref.owner}/{pr_ref.repo}#{pr_ref.number}."
+        )
+    return "\n\n---\n\n".join(sections) + "\n", len(sections)
+
+
 def _github_request(
     url: str,
     *,

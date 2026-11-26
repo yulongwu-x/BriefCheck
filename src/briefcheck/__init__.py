@@ -4,7 +4,7 @@ from .diff import DiffHunk, DiffLine, FileDiff, ParsedDiff, annotate_diff, parse
 from .report import Citation, ParsedReport, ReportRow, parse_report
 from .verifier import Finding, VerificationResult, verify_citations, verify_report
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "__version__",

@@ -11,10 +11,12 @@ from typing import Sequence
 from . import __version__
 from .demo import run_demo
 from .diff import annotate_diff, parse_unified_diff
+from .mcp_server import serve_stdio
 from .packer import (
     PackError,
     ReviewBundle,
     fetch_github_bundle,
+    fetch_github_pr_comments,
     fetch_github_pr_diff,
     parse_pr_ref,
     render_bundle,
@@ -221,6 +223,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Fetch the diff directly from a GitHub PR (`owner/repo#123` or URL).",
     )
     p_check.add_argument(
+        "--pr-comments",
+        action="store_true",
+        help="Audit existing PR comments and review bodies from `--pr` instead of reading `--input`.",
+    )
+    p_check.add_argument(
+        "--author",
+        default=None,
+        help="Optional GitHub login filter when using `--pr-comments` (e.g. `coderabbitai[bot]`).",
+    )
+    p_check.add_argument(
         "--token",
         default=None,
         help="Optional GitHub API token when using `--pr` (defaults to `GITHUB_TOKEN` or `GH_TOKEN`).",
@@ -331,6 +343,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default="markdown",
         help="Write Markdown or the report with verification results as JSON to stdout.",
     )
+
+    # --- mcp ---
+    subparsers.add_parser(
+        "mcp",
+        help="Run BriefCheck as a zero-dependency MCP stdio server for Claude Code, Codex, and Cursor.",
+    )
     return parser
 
 
@@ -377,9 +395,14 @@ def _cmd_check(args: argparse.Namespace) -> int:
             "Specify only one diff source among `--diff`, `--git-base`, `--staged`, and `--pr`."
         )
 
-    review_text = _read_text_arg(args.input)
+    if args.pr_comments and not args.pr:
+        raise PackError("`--pr-comments` requires `--pr <owner/repo#num>`.")
+    if args.author and not args.pr_comments:
+        raise PackError("`--author` can only be used together with `--pr-comments`.")
+
     test_log_text = _read_text_arg(args.test_log) if args.test_log else None
     revision = args.revision
+    comments_checked: int | None = None
 
     if args.diff:
         diff_text = _read_text_arg(args.diff)
@@ -396,6 +419,16 @@ def _cmd_check(args: argparse.Namespace) -> int:
         diff_text, pr_rev = fetch_github_pr_diff(pr_ref, token=args.token)
         revision = revision or pr_rev
 
+    if args.pr_comments:
+        pr_ref = parse_pr_ref(args.pr)
+        review_text, comments_checked = fetch_github_pr_comments(
+            pr_ref,
+            author=args.author,
+            token=args.token,
+        )
+    else:
+        review_text = _read_text_arg(args.input)
+
     result = verify_citations(
         review_text,
         diff_text,
@@ -407,14 +440,13 @@ def _cmd_check(args: argparse.Namespace) -> int:
     )
 
     if args.format == "json":
-        print(
-            json.dumps(
-                result.to_dict(strict_warnings=args.strict_warnings),
-                indent=2,
-                ensure_ascii=False,
-            )
-        )
+        payload = result.to_dict(strict_warnings=args.strict_warnings)
+        if comments_checked is not None:
+            payload["pr_comments_checked"] = comments_checked
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
+        if comments_checked is not None:
+            print(f"PR comments audited: {comments_checked}")
         print(result.format_text(strict_warnings=args.strict_warnings))
 
     return 0 if result.is_valid(strict_warnings=args.strict_warnings) else 1
@@ -558,6 +590,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_pack(args)
         if args.command == "run":
             return _cmd_run(args)
+        if args.command == "mcp":
+            return serve_stdio()
         parser.error(f"Unknown command: {args.command}")
     except (OSError, PackError, RunError) as exc:
         print(f"error: {exc}", file=sys.stderr)

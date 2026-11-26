@@ -3,31 +3,66 @@
 [![CI](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml/badge.svg)](https://github.com/yulongwu-x/BriefCheck/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-[English](README.md) | 简体中文 · [v0.4.0 发布](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.4.0) · [配置 GitHub Action](#使用-github-action)
+[English](README.md) | 简体中文 · [**在线 Playground**](https://yulongwu-x.github.io/BriefCheck/) · [v0.5.0 发布](https://github.com/yulongwu-x/BriefCheck/releases/tag/v0.5.0) · [MCP 服务](#作为-mcp-服务器运行claude-code--codex--cursor) · [配置 GitHub Action](#使用-github-action)
 
-BriefCheck 用来抓出 AI PR 审查里的虚构/错位行号，并逐条核对 GitHub Issue 的验收要求与 PR 改动。你可以把**任意 AI 工具（Claude Code / Codex / Cursor / 自定义脚本）**的审查输出直接通过管道交给 `briefcheck check` 验真，也可以组合使用 **Agent Skill**、**零依赖 Python CLI** 和 **GitHub Action** 完成端到端验收审查。
+BriefCheck 用来抓出 AI PR 审查里的虚构/错位行号，并逐条核对 GitHub Issue 的验收要求与 PR 改动。你可以把**任意 AI 工具（Claude Code / Codex / Cursor / Copilot / 自定义脚本）**的审查输出直接通过管道交给 `briefcheck check` 验真，通过内置**零依赖 MCP 服务器（`briefcheck mcp`）**原生接入编程 Agent，也可以组合使用 **Agent Skill**、**Python CLI** 和 **GitHub Action** 完成端到端验收审查。
 
 ![BriefCheck 确定性引用行号校验演示](docs/briefcheck-demo.png)
 
+> **免安装在线试玩**：[yulongwu-x.github.io/BriefCheck](https://yulongwu-x.github.io/BriefCheck/) —— 直接粘贴任意 git diff 和 AI 审查意见，在浏览器内实时验证行号引用。
+
 ## 用 `briefcheck check` 校验任意 AI 代码审查
 
-如果你已经在用 Claude Code、Codex 或自己的审查 Prompt，无需改用特定表格格式，直接通过标准输入管道即可核对任意自由格式 Markdown 里的所有 `path:line` 引用（默认忽略代码块，支持 `--git-base`、`--staged`、`--diff` 和 `--pr`）：
+如果你已经在用 Claude Code、Codex、Cursor 或自己的审查 Prompt，无需改用特定表格格式，直接通过标准输入管道即可核对任意自由格式 Markdown 里的 `path:line`、`path:start–end`、`path:line:col` 与 GitHub `path#L12-L20` 引用（默认忽略代码块，支持 `--git-base`、`--staged`、`--diff`、`--pr` 及 `--pr-comments`）：
 
 ```sh
 # 直接校验 Claude Code 或 Codex 输出的审查意见
 claude -p "Review git diff with file:line citations" | briefcheck check --git-base origin/main
 codex exec "Review my staged changes with file:line citations" | briefcheck check --staged
 
+# 一键审计线上 GitHub PR 已发表的 AI/人工审查评论
+briefcheck check --pr owner/repo#123 --pr-comments
+briefcheck check --pr owner/repo#123 --pr-comments --author "coderabbitai[bot]"
+
 # 或对照线上 GitHub PR 校验本地保存的任意审查报告
 briefcheck check --input review.md --pr owner/repo#123 --require-citations
 ```
 
-## 发布前抓出错误行号
+## 作为 MCP 服务器运行（Claude Code / Codex / Cursor）
 
-有 Python 3.10+ 就能试跑内置演示，无需准备 PR 或 API 密钥。
+BriefCheck 内置**零依赖 MCP stdio 服务器**（`briefcheck mcp`），提供 4 个确定性工具（`briefcheck_annotate_diff`、`briefcheck_check_citations`、`briefcheck_verify_report`、`briefcheck_pack_review`），让编程 Agent 在输出代码审查前自动核对 `base | new` 精确行号并自检所有引用：
 
 ```sh
-python -m pip install https://github.com/yulongwu-x/BriefCheck/releases/download/v0.4.0/briefcheck-0.4.0-py3-none-any.whl
+# Claude Code
+claude mcp add briefcheck -- briefcheck mcp
+
+# OpenAI Codex CLI
+codex mcp add briefcheck -- briefcheck mcp
+```
+
+或在 Cursor / Windsurf / VS Code / Antigravity 的 MCP 配置（`mcp.json`）中添加：
+
+```json
+{
+  "mcpServers": {
+    "briefcheck": {
+      "command": "briefcheck",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+## 发布前抓出错误行号
+
+有 Python 3.10+ 就能试跑内置演示，无需准备 PR 或 API 密钥：
+
+```sh
+# 使用 uvx 免安装直接试跑
+uvx --from git+https://github.com/yulongwu-x/BriefCheck briefcheck demo
+
+# 或安装预编译零依赖 Wheel
+python -m pip install https://github.com/yulongwu-x/BriefCheck/releases/download/v0.5.0/briefcheck-0.5.0-py3-none-any.whl
 python -m briefcheck demo
 ```
 
@@ -169,7 +204,7 @@ briefcheck run \
 
 ## 使用 GitHub Action
 
-将下面的工作流保存到 `.github/workflows/briefcheck.yml`。在仓库中配置 `OPENAI_API_KEY` Secret 和 `BRIEFCHECK_MODEL` 变量。下面的工作流使用 [v0.4.0 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.4.0/action.yml)。
+将下面的工作流保存到 `.github/workflows/briefcheck.yml`。在仓库中配置 `OPENAI_API_KEY` Secret 和 `BRIEFCHECK_MODEL` 变量。下面的工作流使用 [v0.5.0 Action](https://github.com/yulongwu-x/BriefCheck/blob/v0.5.0/action.yml)。
 
 ~~~yaml
 name: BriefCheck review
@@ -190,7 +225,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: yulongwu-x/BriefCheck@v0.4.0
+      - uses: yulongwu-x/BriefCheck@v0.5.0
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           model: ${{ vars.BRIEFCHECK_MODEL }}

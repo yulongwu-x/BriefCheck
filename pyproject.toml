@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "briefcheck"
-version = "0.4.0"
-description = "Requirement-by-requirement PR verification against GitHub issue acceptance criteria, with deterministic diff citation checking and an Agent Skill."
+version = "0.5.0"
+description = "Catch hallucinated diff citations in any AI PR review — zero-dependency Python CLI, MCP server, Agent Skill, and GitHub Action."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
@@ -14,9 +14,13 @@ authors = [
 ]
 keywords = [
   "code-review",
+  "ai-code-review",
   "pull-request",
   "github",
   "diff",
+  "mcp",
+  "mcp-server",
+  "claude-code",
   "codex",
   "agent-skill",
   "verification",
